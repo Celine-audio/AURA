@@ -1,0 +1,95 @@
+                                   AURA
+                          Licence and third-party notices
+
+Copyright (C) 2026 Céline Audio
+
+AURA is free software: you can redistribute it and/or modify it under the
+terms of the GNU Affero General Public License, version 3, as published by the
+Free Software Foundation.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
+
+The full licence text is in the file COPYING beside this one.
+
+Source: https://github.com/Celine-audio/Aura
+
+
+================================================================================
+WHY AGPL
+================================================================================
+
+AURA being free open-source software using the JUCE framework, using its
+free licence, it inherits its AGPLv3 terms. AURA is then under the GNU AGPL
+v3 licence.
+
+In practice:
+
+  * Using it costs nothing and obliges nothing. The licence governs distributing
+    the software, not what you make with it. Audio you process through AURA
+    and the EQ curves and impulse responses you export are your own work.
+
+  * You may fork, modify and redistribute it, provided you do so under the AGPL
+    and pass the source on. You may not relicense it or ship a closed-source
+    build of it.
+
+  * Anyone you give a binary to is entitled to the corresponding source for that
+    exact build. Development happens in public and each release is built from a
+    tagged commit, which is how that right is served.
+
+
+================================================================================
+THIRD-PARTY COMPONENTS
+================================================================================
+
+The following are bundled inside every build and keep their own licences rather
+than AURA's.
+
+  JUCE 9.0.1 ................... AGPLv3, (C) Raw Material Software Limited
+  clap-juce-extensions ......... MIT, (C) 2019-2020 Paul Walker
+  Font Awesome Free icons ...... CC BY 4.0, (C) Fonticons, Inc.
+  Jura typeface ................ SIL Open Font Licence 1.1, (C) 2019 The Jura Project Authors
+  JetBrains Mono typeface ...... SIL Open Font Licence 1.1, (C) 2020 The JetBrains Mono Project Authors
+  Nico Moji typeface ........... SIL Open Font Licence 1.1, (C) 2016 The Nico Moji Project Authors
+
+Libraries JUCE vendors inside its own modules, compiled in as part of JUCE and
+all permissively licensed:
+
+  VST®3 SDK .................... MIT, (C) 2025 Steinberg Media Technologies GmbH
+  LV2 SDK ...................... ISC
+  LunaSVG and PlutoVG .......... MIT. JUCE 9's SVG parser
+  HarfBuzz ..................... Old MIT
+  SheenBidi .................... Apache 2.0
+  zlib, pnglib ................. zlib
+  jpeglib ...................... Independent JPEG Group
+  FLAC, Ogg Vorbis ............. BSD
+  AudioUnitSDK ................. Apache 2.0 (macOS builds only)
+
+The complete list, with paths, is in JUCE/LICENSE.md.
+
+AURA links juce_audio_utils, juce_audio_processors, juce_dsp, juce_gui_basics and
+juce_gui_extra, so the libraries behind juce_opengl, juce_box2d and
+juce_javascript are not compiled in.
+
+VST is a registered trademark of Steinberg Media Technologies GmbH.
+
+Font Awesome Free is CC BY 4.0, which makes attribution a condition of use
+rather than a courtesy. It is given here, in THIRD-PARTY-NOTICES, in the README,
+and in the plugin's own About window.
+
+The CODE_OF_CONDUCT.md file is the Contributor Covenant 2.1, used under
+CC BY 4.0, (C) the Contributor Covenant project.
+
+Used only to build and test AURA:
+
+  Pamplejuce ................... MIT, (C) 2022 Sudara Williams. The CMake setup
+                                 and CI started as this template, and the file
+                                 you are reading replaced its licence here
+  cmake-includes ............... MIT, (C) Sudara Williams. The shared CMake
+                                 modules in cmake/, carried as a submodule
+  Catch2 3.8.1 ................. Boost Software Licence 1.0
+  CPM.cmake .................... MIT
