@@ -568,3 +568,31 @@ TEST_CASE ("A match keeps its frequencies when the sample rate changes", "[proce
     // Within 2%. Doing nothing about the rate change puts this out by 8.8%.
     CHECK_THAT (at48, Catch::Matchers::WithinRel (at441, 0.02f));
 }
+
+TEST_CASE ("The plugin does not fade in when the host prepares it", "[processor]")
+{
+    // juce::dsp::Gain::reset() snaps its smoother to the *current target*, and Gain's
+    // target starts at zero -- so resetting before the gain has been set leaves the
+    // plugin ramping up from silence over the ramp duration on every prepareToPlay.
+    // A 50 ms fade-in at the top of every take, quiet enough to be blamed on the
+    // material rather than on the plugin.
+    PluginProcessor plugin;
+    plugin.prepareToPlay (sampleRate, blockSize);
+
+    juce::AudioBuffer<float> buffer (2, blockSize), original (2, blockSize);
+    juce::MidiBuffer midi;
+    juce::Random random { 11 };
+
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < blockSize; ++i)
+            buffer.setSample (ch, i, random.nextFloat() * 2.0f - 1.0f);
+
+    original.makeCopyOf (buffer);
+    plugin.processBlock (buffer, midi);
+
+    // Unmatched, nothing is convolved, so the output is the input at unity -- and the
+    // very first samples are exactly where a fade-in hides.
+    for (int i = 0; i < 32; ++i)
+        REQUIRE_THAT (buffer.getSample (0, i),
+                      Catch::Matchers::WithinAbs (original.getSample (0, i), 1.0e-5f));
+}

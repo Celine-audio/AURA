@@ -132,6 +132,7 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
                                         (juce::uint32) juce::jmax (1, getMainBusNumOutputChannels()) };
     outputGain.prepare (spec);
     outputGain.setRampDurationSeconds (0.05);
+    outputGain.setGainDecibels (apvts.getRawParameterValue (ParamID::outputGain)->load());
     outputGain.reset();
 }
 
