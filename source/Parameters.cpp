@@ -93,7 +93,7 @@ namespace Parameters
                                 percent ("%")));
 
         layout.add (floatParam (ParamID::outputGain, "Output",
-                                juce::NormalisableRange<float> { -24.0f, 24.0f, 0.1f }, 0.0f,
+                                juce::NormalisableRange<float> { -12.0f, 12.0f, 0.1f }, 0.0f,
                                 juce::AudioParameterFloatAttributes()
                                     .withLabel ("dB")
                                     .withStringFromValueFunction ([] (float v, int)
