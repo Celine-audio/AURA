@@ -6,33 +6,22 @@ namespace Celine
 {
     //==========================================================================
     /**
-        The palette, in one place. Shared verbatim with Celine, whose design this
-        is: the values below were sampled out of the same Figma file and should
-        stay in step with it rather than drifting to suit one plugin.
+        The palette, in one place, shared across the house plugins and sampled from the
+        Figma files rather than eyeballed -- which is why the values are odd numbers.
 
-        Monokai, near enough: the canonical background, foreground and six
-        accents, plus two greys the original uses for panels and selection. The
-        colours were scattered as literals across four files before this, which
-        meant "make it darker" was a hunt rather than an edit -- and the same
-        yellow existed twice with two slightly different values.
+        Two rules. Nothing outside this header names a hex value; and the accents are
+        named for the job they do rather than for the colour they are, so a change of
+        palette does not have to be chased through the call sites.
 
-        Two rules worth keeping. Nothing outside this header should name a hex
-        value; and the accents are picked for *meaning* rather than for looks, so
-        `unset` being the loudest colour in the set is the point, not an
-        accident.
+        The design is two-tone, and that is the thing to hold on to when adding
+        anything: the chrome is dark aubergine and the canvas darker still, while the
+        panels you reach into are near-white. A new widget has to know which side of
+        that line it sits on, because the text colour flips with it.
     */
     namespace Theme
     {
         //======================================================================
-        // Surfaces. Every value here was sampled out of the Figma file rather
-        // than eyeballed, which is why they are odd numbers.
-        //
-        // The design is deliberately two-tone, and that is the thing to hold on
-        // to when adding anything: the *chrome* is dark aubergine and the
-        // *canvas* is darker still, but the two panels you reach into -- the
-        // parts palette and the control strip -- are near-white. A new widget
-        // has to know which side of that line it sits on, because the text
-        // colour flips with it.
+        // Surfaces.
 
         /** Titlebar, toolbar, inspector, ruler chrome. */
         inline juce::Colour chrome() { return juce::Colour (0xff3b334b); }
@@ -40,7 +29,7 @@ namespace Celine
         /** The sheet you draw on. */
         inline juce::Colour background() { return juce::Colour (0xff28262e); }
 
-        /** The light panels: parts palette and control strip. */
+        /** The light panels. */
         inline juce::Colour panel() { return juce::Colour (0xfff9fbff); }
 
         /** Buttons, fields, dropdowns -- the dark slate that sits on chrome. */
@@ -49,35 +38,33 @@ namespace Celine
         /** Hover and selection, a step up from surface. */
         inline juce::Colour surfaceBright() { return juce::Colour (0xff4f485d); }
 
-        /** Borders. 1.2px of it around every button in the mockup. */
+        /** Borders. */
         inline juce::Colour line() { return juce::Colour (0xffd9d9d9); }
 
-        /** The console, darker than anything else so it reads as a hole. */
+        /** The graph's ground, darker than anything else so it reads as a hole. */
         inline juce::Colour consoleBackground() { return juce::Colour (0xff17151a); }
 
-        /** A row in the parts palette. */
+        /** A row in a list. */
         inline juce::Colour pill() { return juce::Colour (0xffdcdee4); }
 
-        /** The dots on the sheet. Barely there on purpose -- they are a ruler you
-            aim with, not part of the drawing, and they were `line()` until a
-            measurement of the mockup showed that to be five times too bright. */
+        /** Grid lines. Barely there on purpose -- they are a ruler you read against,
+            not part of the picture. */
         inline juce::Colour grid() { return juce::Colour (0xff5c5c5c); }
 
         //======================================================================
         // Text. Two families, because of the two-tone split above.
 
-        /** On chrome. */
-        inline juce::Colour text() { return juce::Colour (0xfff8f8f3); }
+        /** On chrome. Céline White -- the same value the light panels are, because the
+            ink on the dark half of the design and the ground on the light half are one
+            colour used two ways. It was Monokai's warm off-white, which put a faintly
+            yellow white beside a faintly blue one wherever the two halves met. */
+        inline juce::Colour text() { return juce::Colour (0xfff9fbff); }
         inline juce::Colour textDim() { return juce::Colour (0xffd9d9d9); }
         inline juce::Colour comment() { return juce::Colour (0xff888791); }
 
-        /** Ink for a control that cannot be used right now -- Rotate with
-            nothing selected, Undo with nothing to undo.
-
-            Deliberately several steps below textDim(), which is the *idle* look
-            of a control that does work: if the two were close, "greyed out" and
-            "not hovered" would look the same and the toolbar would stop saying
-            anything. */
+        /** Ink for a control that cannot be used right now. Several steps below
+            textDim(), which is the *idle* look of a control that does work: if the two
+            were close, "greyed out" and "not hovered" would look the same. */
         inline juce::Colour textDisabled() { return comment(); }
 
         /** On the light panels, where the above would be invisible. */
@@ -86,70 +73,56 @@ namespace Celine
         //======================================================================
         // Accents.
 
-        /** The one accent: an armed tool, a toggle that is on, the channel
-            picker. Anything the user has *chosen* wears it. */
         inline juce::Colour teal() { return juce::Colour (0xff8F63D5); }
-
-        /** Wires, and the drawing's own violet. */
         inline juce::Colour violet() { return juce::Colour (0xff9761dc); }
 
+        /** The primary accent: whatever the plugin is doing to the signal. Every filled
+            control uses this, so changing it here re-skins the plugin. */
+        inline juce::Colour accent() { return violet(); }
+
+        /** A second accent, for when one curve or channel has to be told apart from
+            another. Sits opposite the primary on the wheel. */
+        inline juce::Colour accentAlt() { return juce::Colour (0xff4fc9e8); }
+
+        /** Anything live and committing. */
+        inline juce::Colour record() { return juce::Colour (0xfff92672); }
+
         //======================================================================
-        // The two selection-box rules, which have to be told apart at a glance.
-        // Kept as roles rather than raw colours because *which* two colours
-        // matters less than their being obviously different from each other.
-
-        /** Left-to-right: takes only what fits entirely inside. */
-        inline juce::Colour boxEnclose() { return teal(); }
-
-        /** Right-to-left: takes anything it touches. */
-        inline juce::Colour boxCrossing() { return juce::Colour (0xffa6e22e); }
-
-        //======================================================================
-        // What each colour *means* on the graph. Named by job rather than by
-        // colour, so the meaning survives a change of palette.
-
-        // These two and correction() below are chosen as a set, and the set is the
-        // point: blue and red are what mix to violet, so the colour of the thing
-        // the plugin builds says where it came from. Hue bears it out -- 199 and
-        // 357 degrees, with the correction's violet at 262, very near the midpoint
-        // of the two going round through purple.
+        // What each colour *means* on the graph. Named by job rather than by colour, so
+        // the meaning survives a change of palette.
+        //
+        // These three are chosen as a set, and the set is the point: blue and red are
+        // what mix to violet, so the colour of the thing the plugin builds says where it
+        // came from. Hue bears it out -- 199 and 357 degrees, with the correction's
+        // violet at 262, very near the midpoint of the two going round through purple.
 
         /** The signal going through the plugin now. */
-        inline juce::Colour current() { return juce::Colour (0xff4fc9e8); }
+        inline juce::Colour current() { return accentAlt(); }
 
         /** The material being matched to. */
         inline juce::Colour reference() { return juce::Colour (0xfff2545b); }
 
-        /** The correction the plugin is applying: the brand's own violet, which is
-            also what the two signal colours above mix to. */
-        inline juce::Colour correction() { return violet(); }
+        /** The correction the plugin is applying: the brand's own violet, which is also
+            what the two signal colours above mix to. */
+        inline juce::Colour correction() { return accent(); }
 
-        /** A capture in progress. */
-        inline juce::Colour record() { return juce::Colour (0xfff92672); }
+        /** The unfilled part of a knob's ring and of the cut slider's track. */
+        inline juce::Colour track() { return juce::Colour (0xff565656); }
 
         /** A control that is armed or in force. */
         inline juce::Colour toolActive() { return teal(); }
 
-        /** Bypass engaged: the plugin is passing audio through untouched, which
-            is worth noticing. */
-        inline juce::Colour danger() { return juce::Colour (0xfff92672); }
+        /** Bypass engaged: the plugin is passing audio through untouched, which is
+            worth noticing. */
+        inline juce::Colour danger()  { return juce::Colour (0xfff92672); }
         inline juce::Colour warning() { return juce::Colour (0xffe6db74); }
-        inline juce::Colour error() { return juce::Colour (0xfff92672); }
+        inline juce::Colour error()   { return juce::Colour (0xfff92672); }
 
         //======================================================================
-        // Geometry the mockup is consistent about, so that it is stated once
-        // rather than sprinkled through four files as literals.
+        // Geometry the mockup is consistent about, stated once rather than sprinkled
+        // through four files as literals.
 
         /** Corner radius on every button, field and pill. */
-        /** The border of a control that cannot be used.
-
-            Shared rather than written out at each site: undo and redo draw no
-            frame of their own -- the housing behind them is their frame, and it
-            is painted by the editor -- so two literals here would be two places
-            for the same greying to drift apart, which is exactly how the
-            housing came to stay bright while its icons dimmed. */
-        inline juce::Colour lineDisabled() { return line().withAlpha (0.25f); }
-
         inline constexpr float cornerRadius = 8.0f;
 
         /** Border weight on buttons and fields. */
@@ -161,14 +134,6 @@ namespace Celine
 
         /** The toolbar band: 33px buttons with 6px of air above and below. */
         inline constexpr int toolbarHeight = 45;
-
-        /** The preset field, which the design draws at one fixed width rather
-            than letting it take up the slack. */
-
-        /** The two side panels, both fixed: they are lists of fixed-width things,
-            so the whole of a resize goes to the sheet. */
-
-        /** One palette row, and the pill inside it. */
     } // namespace Theme
 
 } // namespace Celine

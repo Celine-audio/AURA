@@ -79,7 +79,6 @@ MatchEngine::MatchEngine() = default;
 
 MatchEngine::~MatchEngine()
 {
-    cancelPendingUpdate();
     stopTimer();
 }
 
@@ -271,13 +270,11 @@ const MatchEngine::CorrectionCurves& MatchEngine::getCorrectionCurves()
 void MatchEngine::setSettings (const Settings& newSettings) noexcept
 {
     settings = newSettings;
-
-    // Called on whatever thread moved the parameter (possibly the audio thread), so
-    // defer the heavy rebuild to the message thread.
     correctionDirty.store (true);
 
-    if (matched.load())
-        triggerAsyncUpdate();
+    // Straight to the throttle, because this is already the message thread -- see the
+    // declaration for why it has to be.
+    requestRebuild();
 }
 
 //==============================================================================
@@ -346,11 +343,6 @@ void MatchEngine::requestRebuild()
     stopTimer();
     lastRebuildMs = now;
     rebuildMatch();
-}
-
-void MatchEngine::handleAsyncUpdate()
-{
-    requestRebuild();
 }
 
 void MatchEngine::timerCallback()

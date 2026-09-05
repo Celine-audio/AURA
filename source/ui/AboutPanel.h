@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AuraLookAndFeel.h"
+#include "PluginLookAndFeel.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -17,7 +17,7 @@ public:
     /** Below this the footer's marks start overlapping the Close button. */
     enum { minimumWidth = 620, minimumHeight = 440 };
 
-    explicit AboutPanel (const juce::String& heading);
+    AboutPanel();
     ~AboutPanel() override;
 
     void paint (juce::Graphics&) override;
@@ -29,7 +29,10 @@ private:
     // Its own, not the editor's. This panel lives in a DialogWindow, which is a
     // desktop window with no parent component, so it inherits nothing from the editor
     // and was drawing itself in JUCE's default grey.
-    AuraLookAndFeel lookAndFeel;
+    PluginLookAndFeel lookAndFeel;
+
+    // The graph's ground, carrying everything below the masthead.
+    juce::Rectangle<int> panelBounds;
 
     std::unique_ptr<juce::Drawable> vstMark, auMark, clapMark, lv2Mark;
     juce::Rectangle<int> vstBounds, auBounds, clapBounds, lv2Bounds;
@@ -40,7 +43,7 @@ private:
     std::unique_ptr<juce::Drawable> logo, wordmark;
     juce::Rectangle<int> logoBounds, wordmarkBounds;
 
-    juce::Label subtitle, version;
+    juce::Label subtitle, version, wordmarkText;
     juce::TextEditor body;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AboutPanel)

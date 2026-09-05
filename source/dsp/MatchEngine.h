@@ -23,8 +23,7 @@
     Threading: pushSource/pushReference/process are the audio thread and never
     allocate or block. Everything else is the message thread.
 */
-class MatchEngine : private juce::Timer,
-                    private juce::AsyncUpdater
+class MatchEngine : private juce::Timer
 {
 public:
     /** The final correction being applied, in dB per FFT bin, with the L/R link
@@ -108,7 +107,16 @@ public:
     void markCorrectionDirty() noexcept { correctionDirty.store (true); }
 
     /** New curve-shaping settings. Marks the cache dirty and schedules a throttled
-        rebuild of the impulse response. Safe to call from any thread. */
+        rebuild of the impulse response.
+
+        **Message thread only**, and that is the whole of `settings`' thread safety:
+        one owner, so there is nothing to synchronise. It used to accept a call from
+        whichever thread moved the parameter -- which for host automation is the audio
+        thread -- and that was wrong twice over. Writing the struct there raced the
+        rebuild reading its fields, which could compute a curve from half the old
+        settings and half the new; and the async update it posted takes a lock and can
+        allocate, on the one thread that must do neither. The processor now polls a
+        flag and calls this from its own timer. */
     void setSettings (const Settings&) noexcept;
 
     int getFftSize() const noexcept { return 1 << spectrumFftOrder; }
@@ -174,7 +182,6 @@ private:
     // handful of times a second rather than on every frame.
     void requestRebuild();
 
-    void handleAsyncUpdate() override;
     void timerCallback() override;
 
     Capture source, reference;
@@ -182,6 +189,8 @@ private:
     PartitionedConvolver convolution;
 
     CorrectionCurves correctionCache;
+
+    /** Message thread only -- see setSettings. */
     Settings settings;
 
     std::atomic<bool> correctionDirty { true };

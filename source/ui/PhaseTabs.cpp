@@ -25,6 +25,14 @@ PhaseTab::PhaseTab (const juce::String& tabTitle, const juce::String& actionText
     action.setColour (juce::TextButton::buttonOnColourId, Theme::record());
     action.setColour (juce::TextButton::textColourOffId, Theme::record().brighter (0.35f));
     action.setColour (juce::TextButton::textColourOnId, juce::Colours::white);
+
+    // Said on the button rather than only in the tab's own status line, because the
+    // button is what the pointer is over when the question comes up.
+    action.setTooltip (arms ? "Listen to what is playing and take its average spectrum. "
+                              "Press again to stop."
+                            : "Build the correction from the difference between the two "
+                              "learned spectra.");
+
     addAndMakeVisible (action);
 }
 
@@ -249,6 +257,13 @@ PhaseTabBar::PhaseTabBar()
         // themselves out regardless: hitTest follows the chevron, not the bounds.
         addAndMakeVisible (tab);
     }
+
+    tabs[(size_t) current]->setTooltip ("The signal being corrected: what is playing "
+                                        "through the plugin now.");
+    tabs[(size_t) reference]->setTooltip ("The material being matched to: the sound the "
+                                          "correction is aiming at.");
+    tabs[(size_t) eqCurve]->setTooltip ("The correction itself -- the difference between "
+                                        "the two, which is what the plugin applies.");
 
     tabs[(size_t) current]->setSelected (true);
 }

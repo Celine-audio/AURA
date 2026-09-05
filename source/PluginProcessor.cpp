@@ -62,12 +62,18 @@ PluginProcessor::PluginProcessor()
 
     for (auto* id : ParamID::filterShaping)
         apvts.addParameterListener (id, this);
+
+    startTimer (settingsPollMs);
 }
 
 PluginProcessor::~PluginProcessor()
 {
     for (auto* id : ParamID::filterShaping)
         apvts.removeParameterListener (id, this);
+
+    // It can be mid-flight when a host closes the plugin, and it calls back into
+    // members that are about to stop existing.
+    stopTimer();
 }
 
 //==============================================================================
@@ -90,9 +96,33 @@ MatchEngine::Settings PluginProcessor::currentSettings() const
 
 void PluginProcessor::parameterChanged (const juce::String&, float)
 {
-    // Called on whatever thread moved the parameter; the engine defers the heavy
-    // rebuild to the message thread itself.
-    engine.setSettings (currentSettings());
+    // Called on whichever thread moved the parameter, and which one that is decides
+    // what may be done about it.
+    //
+    // A control moved in the editor, or a state reload, arrives on the message thread,
+    // and the settings go straight across -- so the curve the display draws and the
+    // response an export writes are the ones belonging to the setting just made, in the
+    // same call. That immediacy is load-bearing: read a frame late, Export would write
+    // the previous setting.
+    //
+    // Host automation arrives on the audio thread, where none of that may happen: the
+    // engine's settings are the message thread's to write, and posting a message takes
+    // a lock and can allocate. A flag is all this thread may set.
+    if (juce::MessageManager::existsAndIsCurrentThread())
+    {
+        engine.setSettings (currentSettings());
+        return;
+    }
+
+    settingsDirty.store (true);
+}
+
+void PluginProcessor::timerCallback()
+{
+    // Cleared before the work, not after: a move arriving while the settings are being
+    // pushed has to leave the flag set for the next tick rather than be swallowed.
+    if (settingsDirty.exchange (false))
+        engine.setSettings (currentSettings());
 }
 
 void PluginProcessor::setUiActive (bool active)

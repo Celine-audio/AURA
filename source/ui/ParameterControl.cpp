@@ -1,6 +1,6 @@
 #include "ParameterControl.h"
 
-#include "AuraLookAndFeel.h"
+#include "PluginLookAndFeel.h"
 #include "Fonts.h"
 #include "Theme.h"
 
@@ -11,6 +11,27 @@ namespace
     constexpr int nameGap = 2;
 }
 
+//==============================================================================
+ParameterControl::Slider::Slider()
+{
+    setScrollWheelEnabled (false);
+
+    // The fourth argument is what matters: it is `userCanPressKeyToSwapMode`, and with
+    // it true -- which is the default -- holding any of ctrl, alt or command swaps the
+    // slider into velocity mode. That is the jumping about. Off, the modifier is left
+    // free to mean what mouseDown makes it mean.
+    setVelocityModeParameters (1.0, 1, 0.0, false);
+    setMouseDragSensitivity (normalSensitivity);
+}
+
+void ParameterControl::Slider::mouseDown (const juce::MouseEvent& event)
+{
+    setMouseDragSensitivity (event.mods.isAltDown() ? fineSensitivity : normalSensitivity);
+
+    juce::Slider::mouseDown (event);
+}
+
+//==============================================================================
 void ParameterControl::setNameFont (juce::Font font, const juce::String& text)
 {
     // Without this the look and feel replaces the face at paint time — see
@@ -35,13 +56,13 @@ ParameterControl::ParameterControl (juce::AudioProcessorValueTreeState& state,
     addAndMakeVisible (nameLabel);
 
     // The slider bakes its text box colours in when the box is created, which happens
-    // before this component is ever parented to something carrying AuraLookAndFeel —
+    // before this component is ever parented to something carrying PluginLookAndFeel —
     // so they have to be set on the slider itself, and set before setTextBoxStyle.
     slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     slider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
     slider.setColour (juce::Slider::textBoxTextColourId, Theme::text());
-    slider.setColour (juce::Slider::textBoxHighlightColourId, Theme::correction().withAlpha (0.3f));
-    slider.setColour (juce::Slider::rotarySliderFillColourId, Theme::correction());
+    slider.setColour (juce::Slider::textBoxHighlightColourId, Theme::accent().withAlpha (0.3f));
+    slider.setColour (juce::Slider::rotarySliderFillColourId, Theme::accent());
     slider.setColour (juce::Slider::rotarySliderOutlineColourId, Theme::line());
 
     slider.setSliderStyle (style);

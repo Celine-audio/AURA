@@ -20,6 +20,38 @@ public:
                       juce::Slider::SliderStyle style,
                       int textBoxWidth);
 
+    /**
+        A slider that drags the way this house expects one to.
+
+        Two departures from JUCE's default, both of them things a plugin has to decide
+        rather than inherit:
+
+        **The wheel does nothing.** A window with forty-odd controls in it is a window
+        somebody scrolls past, and a wheel that changes whatever it happens to be over
+        turns that into an edit nobody made and cannot see to undo.
+
+        **Holding the fine modifier drags finely rather than by velocity.** JUCE's
+        default is to swap into velocity mode when a modifier is held, which hides the
+        pointer and moves the value by how *fast* the mouse is going -- so a slow hand
+        does nothing and a twitch jumps a long way. It reads as the control being
+        broken. This keeps the drag absolute and simply makes it take six times the
+        distance, which is what "fine" is supposed to mean.
+    */
+    class Slider : public juce::Slider
+    {
+    public:
+        Slider();
+
+        void mouseDown (const juce::MouseEvent&) override;
+
+    private:
+        /** Pixels for the whole range: JUCE's own default, and six times it. Chosen at
+            the top of a drag rather than during one -- changing sensitivity underneath
+            a gesture already in progress is itself a jump. */
+        static constexpr int normalSensitivity = 250;
+        static constexpr int fineSensitivity = 1500;
+    };
+
     juce::Slider& getSlider() noexcept { return slider; }
 
     void resized() override;
@@ -32,7 +64,7 @@ protected:
         for it says so here rather than reaching into the label. */
     void setNameFont (juce::Font font, const juce::String& text);
 
-    juce::Slider slider;
+    Slider slider;
 
 private:
     juce::Label nameLabel;

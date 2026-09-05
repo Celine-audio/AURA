@@ -30,12 +30,15 @@ ExportPanel::ExportPanel (bool linearPhase)
         addAndMakeVisible (label);
     }
 
+    layoutBox.setTooltip ("Whether the file carries one correction or a different one "
+                          "per channel.");
     layoutBox.addItem ("Mono", monoLayout);
     layoutBox.addItem ("Stereo", stereoLayout);
     layoutBox.setSelectedId (stereoLayout, juce::dontSendNotification);
     layoutBox.onChange = [this] { refreshLayout(); };
     addAndMakeVisible (layoutBox);
 
+    sourceBox.setTooltip ("Which channel's correction a mono file is written from.");
     sourceBox.addItem ("Left", leftSource);
     sourceBox.addItem ("Right", rightSource);
     sourceBox.addItem ("L+R", midSource);
@@ -45,11 +48,15 @@ ExportPanel::ExportPanel (bool linearPhase)
     // Opens on whatever the plugin is doing, so the obvious action reproduces what
     // you hear; the other is there because a minimum-phase file costs the convolver
     // loading it no latency and leaves no pre-ringing.
+    phaseBox.setTooltip ("How the exported response is built. Linear phase keeps every "
+                         "frequency in step and costs latency wherever it is loaded; "
+                         "minimum phase costs none.");
     phaseBox.addItem ("Linear", linearPhaseId);
     phaseBox.addItem ("Minimum", minimumPhaseId);
     phaseBox.setSelectedId (linearPhase ? linearPhaseId : minimumPhaseId, juce::dontSendNotification);
     addAndMakeVisible (phaseBox);
 
+    exportButton.setTooltip ("Choose where to write the file.");
     exportButton.setColour (juce::TextButton::buttonColourId, Theme::correction());
     exportButton.setColour (juce::TextButton::textColourOffId, Theme::chrome());
     exportButton.onClick = [this]

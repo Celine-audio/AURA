@@ -1,5 +1,7 @@
 #include "PluginEditor.h"
 
+#include "ProductInfo.h"
+
 #include "ui/EmbeddedAssets.h"
 #include "ui/Fonts.h"
 
@@ -69,6 +71,16 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 {
     setLookAndFeel (&lookAndFeel);
 
+    // A tooltip paints a rounded panel, so it must not be opaque -- an opaque component
+    // has to fill every pixel it owns, and the four corners outside the rounding are
+    // exactly the ones it does not paint; left opaque they came out as square spikes of
+    // whatever was in the buffer. TooltipWindow sets the flag in its constructor and
+    // offers no way to ask otherwise. Safe because this one is parented to the editor
+    // rather than put on the desktop, so what shows through the corners is this window.
+    tooltips.setOpaque (false);
+
+    display.setTooltip ("The signal, the reference and the correction between them. "
+                        "Drag the band edges to choose how much of the spectrum is matched.");
     addAndMakeVisible (display);
 
     tabBar.onSelectionChanged = [this] (PhaseTabBar::Stage stage)
@@ -88,11 +100,13 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     addAndMakeVisible (tabBar);
 
+    exportButton.setTooltip ("Export the correction out as an impulse response.");
     exportButton.onClick = [this] { showExportPanel(); };
     addAndMakeVisible (exportButton);
 
     logo = Celine::Assets::drawable ("logo.svg");
-    wordmark = Celine::Assets::drawable ("aura.svg");
+    wordmark = Celine::Assets::drawable (ProductInfo::wordmarkAsset,
+                                        Celine::Assets::IfMissing::returnNull);
 
     if (logo != nullptr)
         Celine::Assets::tint (*logo, Theme::text());
@@ -110,6 +124,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     addAndMakeVisible (phaseLabel);
 
     // Item IDs are the choice indices plus one, which is what the attachment expects.
+    phaseBox.setTooltip ("Linear phase adds latency, minimum phase costs none but adds phaseshift.");
     phaseBox.addItem ("Linear", 1);
     phaseBox.addItem ("Minimum", 2);
     addAndMakeVisible (phaseBox);
@@ -129,9 +144,15 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     refreshBypassLook();
 
+    amountFader.getSlider().setTooltip ("How much of the measured difference to apply.");
     addAndMakeVisible (amountFader);
 
+    outputFader.getSlider().setTooltip ("Output gain.");
     addAndMakeVisible (outputFader);
+
+    smoothingRow.getSlider().setTooltip ("How finely the two curves are matched.");
+
+    linkRow.getSlider().setTooltip ("How independent the correction is for L and R channels.");
 
     for (auto* row : { &smoothingRow, &linkRow })
         addAndMakeVisible (row);
@@ -490,8 +511,11 @@ void PluginEditor::paint (juce::Graphics& g)
     // both of which work from ascent and descent — puts it where the eye wants it.
     // Drawn from the SVG, it is placed off its own ink by exactly the call that
     // places the mark beside it, and the two cannot disagree.
+    // Centred on its letters rather than on its box. A wordmark with descenders in it
+    // has a bounding box reaching below the line the word stands on, so centring the
+    // box sits the word visibly high against the house mark beside it.
     if (wordmark != nullptr && ! wordmarkBounds.isEmpty())
-        wordmark->drawWithin (g, wordmarkBounds.toFloat(), juce::RectanglePlacement::centred, 1.0f);
+        Celine::Assets::drawWordmark (g, *wordmark, wordmarkBounds.toFloat());
 
 }
 

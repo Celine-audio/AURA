@@ -18,7 +18,8 @@
     spectra come from two analyzers that run only while an editor is open.
 */
 class PluginProcessor : public juce::AudioProcessor,
-                        private juce::AudioProcessorValueTreeState::Listener
+                        private juce::AudioProcessorValueTreeState::Listener,
+                        private juce::Timer
 {
 public:
     using CorrectionCurves = MatchEngine::CorrectionCurves;
@@ -126,6 +127,19 @@ public:
 
 private:
     void parameterChanged (const juce::String& parameterID, float newValue) override;
+    void timerCallback() override;
+
+    /** Set when a parameter moved on a thread that may not push the settings across
+        itself -- which is the audio thread, under host automation. The timer below is
+        what turns it back into a call on the message thread, and it is why
+        MatchEngine::settings has exactly one writer. */
+    std::atomic<bool> settingsDirty { false };
+
+    /** How often that flag is looked at. Automation is the only thing that goes through
+        it -- a control moved in the window is pushed across on the spot -- so this only
+        has to be fast against the engine's own 120 ms rebuild throttle, and it costs
+        nothing while the flag is clear, which is nearly always. */
+    static constexpr int settingsPollMs = 30;
 
     // Reads the curve-shaping parameters into the form the engine works from.
     MatchEngine::Settings currentSettings() const;

@@ -22,11 +22,23 @@ namespace Celine::Assets
         instead of being copied into every file that needs an asset.
     */
 
+    /** Whether a missing file is a bug or a choice.
+
+        Nearly always a bug -- artwork the interface draws is either embedded or the
+        interface has a hole in it -- so `required` asserts in a debug build rather
+        than leaving a blank button to be found by eye later. `optional` is for the
+        handful of assets a project may legitimately not have yet, such as a wordmark
+        that has not been drawn: those have a fallback and must not fire an assertion
+        on every launch. */
+    enum class IfMissing { assertInDebug, returnNull };
+
     /** The bytes for an embedded file, or null. */
-    const char* find(const juce::String& filename, int& sizeInBytes);
+    const char* find(const juce::String& filename, int& sizeInBytes,
+                     IfMissing = IfMissing::assertInDebug);
 
     /** An embedded SVG or image, parsed, or null if it isn't there. */
-    std::unique_ptr<juce::Drawable> drawable(const juce::String& filename);
+    std::unique_ptr<juce::Drawable> drawable(const juce::String& filename,
+                                             IfMissing = IfMissing::assertInDebug);
 
     /** Forces every painted path in a drawable to one colour.
 
@@ -36,4 +48,13 @@ namespace Celine::Assets
         match, so it works on pure black artwork and silently does nothing on
         anything else. */
     void tint(juce::Drawable& drawable, juce::Colour colour);
+
+    /** Draws a wordmark centred on its *letters* rather than on its bounding box.
+
+        A word with descenders in it -- the y and the g in "gallery" -- has a
+        bounding box that reaches below the line the word stands on, so centring
+        the box sits the word visibly high against anything beside it. This finds
+        the baseline as the median of the glyph bottoms, which is the line the
+        majority of the letters actually sit on, and centres on that instead. */
+    void drawWordmark(juce::Graphics&, juce::Drawable&, juce::Rectangle<float> area);
 } // namespace Celine::Assets

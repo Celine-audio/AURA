@@ -3,7 +3,7 @@
 #include "PluginProcessor.h"
 #include "ui/AboutPanel.h"
 #include "ui/ExportPanel.h"
-#include "ui/AuraLookAndFeel.h"
+#include "ui/PluginLookAndFeel.h"
 #include "ui/Theme.h"
 #include "ui/ParameterControl.h"
 #include "ui/PhaseTabs.h"
@@ -39,7 +39,11 @@ private:
     void chooseFileAndExport (IrExport::Options options);
 
     PluginProcessor& processorRef;
-    AuraLookAndFeel lookAndFeel;
+    PluginLookAndFeel lookAndFeel;
+
+    // Every control in the window has a tooltip and none of them can show one without
+    // this: JUCE needs a window to draw them in, and there is no default.
+    juce::TooltipWindow tooltips { this, 600 };
 
     SpectrumDisplay display;
     PhaseTabBar tabBar;

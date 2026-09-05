@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <optional>
+
 namespace Celine
 {
     //==========================================================================
@@ -55,6 +57,18 @@ namespace Celine
             repaint();
         }
 
+        /** Overrides the ink the glyph is drawn in.
+
+            The toolbar's icons are monochrome and want to stay that way -- they are
+            chrome, and chrome that competes with the controls is chrome in the way.
+            The library's two are the opposite case: they sit in a panel of their own
+            carrying the accent, and drawn in the toolbar's grey they read as disabled. */
+        void setIconColour (juce::Colour colour)
+        {
+            iconColour = colour;
+            repaint();
+        }
+
         void paintButton (juce::Graphics& g, bool highlighted, bool down) override
         {
             const auto bounds = getLocalBounds().toFloat().reduced (Theme::borderWidth * 0.5f);
@@ -71,16 +85,20 @@ namespace Celine
                 g.fillRoundedRectangle (bounds, Theme::cornerRadius);
             }
 
-            g.setColour (usable ? Theme::line() : Theme::lineDisabled());
-            g.drawRoundedRectangle (bounds, Theme::cornerRadius, Theme::borderWidth);
-
+            // Fill only, no rule. Every button here is filled with something that
+            // already separates it from what it stands on, so an outline drew a second
+            // edge where one was doing the job.
             if (icon == nullptr)
                 return;
 
             auto drawn = icon->createCopy();
+
+            const auto idle = iconColour.has_value() ? *iconColour : Theme::textDim();
+            const auto lit = iconColour.has_value() ? iconColour->brighter (0.3f) : Theme::text();
+
             Assets::tint (*drawn, ! usable                        ? Theme::textDisabled()
-                                  : active || highlighted || down ? Theme::text()
-                                                                  : Theme::textDim());
+                                  : active || highlighted || down ? lit
+                                                                  : idle);
             drawn->drawWithin (g, bounds.reduced (bounds.getWidth() * iconInset),
                                juce::RectanglePlacement::centred, 1.0f);
         }
@@ -94,6 +112,7 @@ namespace Celine
     private:
         std::unique_ptr<juce::Drawable> icon;
         juce::Colour activeColour { Theme::toolActive() };
+        std::optional<juce::Colour> iconColour;
         bool active = false;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IconButton)

@@ -13,7 +13,8 @@
     Clicking the action button is a separate thing entirely — it starts a capture or
     commits the match — so it never changes the selection on its own.
 */
-class PhaseTab : public juce::Component
+class PhaseTab : public juce::Component,
+                 public juce::SettableTooltipClient
 {
 public:
     /** armsCapture separates the two kinds of action button: a Learn arms a capture,

@@ -28,7 +28,8 @@
     absolute scale where 1.0 is a full-scale sine; the correction curves are in dB
     over the same bins.
 */
-class SpectrumDisplay : public juce::Component
+class SpectrumDisplay : public juce::Component,
+                        public juce::SettableTooltipClient
 {
 public:
     /** Which of the three tabs the view is showing. */
