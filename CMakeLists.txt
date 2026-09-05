@@ -82,7 +82,12 @@ juce_add_plugin("${PROJECT_NAME}"
     # Note: this must have at least one upper-case character
     PLUGIN_CODE CEN2
     LV2URI "https://github.com/Celine-audio/Aura"
+    LV2_PLUGIN_CLASS EQPlugin
+
     FORMATS "${FORMATS}"
+
+    VST3_CATEGORIES Fx EQ
+    AAX_CATEGORY EQ
 
     # The name of your final executable
     # This is how it's listed in the DAW
@@ -94,9 +99,13 @@ juce_add_plugin("${PROJECT_NAME}"
 # Without running into ODR violations
 add_library(SharedCode INTERFACE)
 
+# audio-effect has to stay first -- clap-juce-extensions reads the head of this list to
+# decide what kind of plugin it is building. What follows is the shelf a host files it
+# on, and then the layouts it actually handles: both, since it takes mono in and mono
+# out as readily as stereo.
 clap_juce_extensions_plugin(TARGET "${PROJECT_NAME}"
     CLAP_ID "${BUNDLE_ID}"
-    CLAP_FEATURES audio-effect)
+    CLAP_FEATURES audio-effect equalizer mono stereo)
 
 # Enable fast math, C++20 and a few other target defaults
 include(SharedCodeDefaults)

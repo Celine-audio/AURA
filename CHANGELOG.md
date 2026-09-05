@@ -22,6 +22,9 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Changed
 
+- Formats : **Fx|EQ** to VST3, **lv2:EQPlugin** to LV2, **equalizer** to CLAP,
+  and **EQ** to AAX.
+- The CLAP build declares that it handles mono/stereo.
 - `Theme`'s accessors are lookups rather than constants. The shipped values, the editor
   labels and the file keys are generated from one list (`ui/ThemeRoles.h`), so the enum,
   the table, the `.celthm` format and the editor's rows cannot drift apart.
