@@ -152,7 +152,6 @@ AboutPanel::AboutPanel()
     // face instead, so the window looks finished from the first build.
     wordmarkText.setText (juce::String (JucePlugin_Name).toLowerCase(), juce::dontSendNotification);
     wordmarkText.setFont (Fonts::logo (26.0f));
-    wordmarkText.setColour (juce::Label::textColourId, Theme::text());
     wordmarkText.setJustificationType (juce::Justification::centredLeft);
     addChildComponent (wordmarkText);
     wordmarkText.setVisible (wordmark == nullptr);
@@ -164,7 +163,6 @@ AboutPanel::AboutPanel()
                           + juce::String::fromUTF8 (ProductInfo::companyName),
                       juce::dontSendNotification);
     subtitle.setFont (Fonts::light (12.0f));
-    subtitle.setColour (juce::Label::textColourId, Theme::comment());
     subtitle.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (subtitle);
 
@@ -174,7 +172,6 @@ AboutPanel::AboutPanel()
     // because it is a number to be read off and quoted rather than prose.
     version.setText (JucePlugin_VersionString, juce::dontSendNotification);
     version.setFont (Fonts::mono (13.0f));
-    version.setColour (juce::Label::textColourId, Theme::comment());
     version.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (version);
 
@@ -194,27 +191,45 @@ AboutPanel::AboutPanel()
     // painting one of its own would be a second rectangle inside the first, and a rule
     // around it the only hard line in the window.
     body.setColour (juce::TextEditor::backgroundColourId, juce::Colours::transparentBlack);
-    body.setColour (juce::TextEditor::textColourId, Theme::textDim());
     body.setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
     body.setColour (juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
 
     // The kit's scrollbar is near-white, which against this ground is the brightest
     // thing in the window and reads as a control rather than as a position.
     body.setColour (juce::ScrollBar::thumbColourId, Theme::line().withAlpha (0.22f));
+
     body.setText (aboutBodyText(), false);
     addAndMakeVisible (body);
 
     // The one action here, in the correction's violet like Export: this is the
     // window's own button, not a piece of chrome.
-    close.setColour (juce::TextButton::buttonColourId, Theme::accent());
-    close.setColour (juce::TextButton::textColourOffId, Theme::chrome());
     addAndMakeVisible (close);
+
+    applyColours();
 
     // Last, and it matters. setSize fires resized(), which measures each mark to
     // place it -- so called before the artwork is loaded it sizes every one of them
     // to nothing, and they stay that way until something resizes the window again.
     // A dialog that opens at a different size than this hides the bug completely.
     setSize (700, 620);
+}
+
+void AboutPanel::applyColours()
+{
+    wordmarkText.setColour (juce::Label::textColourId, Theme::text());
+    subtitle.setColour (juce::Label::textColourId, Theme::comment());
+    version.setColour (juce::Label::textColourId, Theme::comment());
+
+    body.setColour (juce::TextEditor::textColourId, Theme::textDim());
+
+    // The kit's scrollbar is near-white, which against this ground is the brightest
+    // thing in the window and reads as a control rather than as a position.
+    body.setColour (juce::ScrollBar::thumbColourId, Theme::line().withAlpha (0.22f));
+
+    // The one action here, in the accent like Export: this is the window's own button,
+    // not a piece of chrome.
+    close.setColour (juce::TextButton::buttonColourId, Theme::accent());
+    close.setColour (juce::TextButton::textColourOffId, Theme::chrome());
 }
 
 AboutPanel::~AboutPanel()
@@ -231,9 +246,9 @@ void AboutPanel::paint (juce::Graphics& g)
     if (logo != nullptr && ! logoBounds.isEmpty())
         logo->drawWithin (g, logoBounds.toFloat(), juce::RectanglePlacement::centred, 1.0f);
 
-    // Baseline-centred, exactly as the toolbar draws it. A wordmark with descenders in
-    // it has a bounding box reaching below the line the word stands on, so a mark
-    // centred on that box sits visibly high against the house logo beside it.
+    // Baseline-centred, exactly as the toolbar draws it. A lowercase wordmark almost
+    // always has a descender, and a mark centred on its bounding box centres that
+    // descender too -- hanging the word visibly above where the eye puts it.
     if (wordmark != nullptr && ! wordmarkBounds.isEmpty())
         Celine::Assets::drawWordmark (g, *wordmark, wordmarkBounds.toFloat());
 

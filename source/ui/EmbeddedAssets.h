@@ -49,12 +49,17 @@ namespace Celine::Assets
         anything else. */
     void tint(juce::Drawable& drawable, juce::Colour colour);
 
-    /** Draws a wordmark centred on its *letters* rather than on its bounding box.
+    /** Draws a wordmark centred on its letters rather than on its bounding box.
 
-        A word with descenders in it -- the y and the g in "gallery" -- has a
-        bounding box that reaches below the line the word stands on, so centring
-        the box sits the word visibly high against anything beside it. This finds
-        the baseline as the median of the glyph bottoms, which is the line the
-        majority of the letters actually sit on, and centres on that instead. */
+        A lowercase wordmark almost always has a descender -- SPACE's `p` drops a
+        seventh of the artwork's height below the baseline -- and every other glyph
+        sits on that baseline. Centring the bounding box therefore centres the
+        descender too, and hangs the word visibly above where the eye puts it. This
+        centres the band the letters actually occupy: the top of the tallest glyph to
+        the baseline the majority of them stand on.
+
+        Measured from the artwork rather than written down as a constant, so a
+        redrawn logo with a different descender stays centred without anybody
+        remembering that this is why. */
     void drawWordmark(juce::Graphics&, juce::Drawable&, juce::Rectangle<float> area);
 } // namespace Celine::Assets

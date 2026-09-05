@@ -44,6 +44,18 @@ public:
 
         void mouseDown (const juce::MouseEvent&) override;
 
+        /** Puts this slider's text-box colours onto the box itself.
+
+            The box copies them out of the slider when it is *made*, and JUCE remakes it
+            on every colour change and every look-and-feel change -- so whoever set the
+            colours has no way to know their push was not undone a moment later by a
+            rebuild it did not ask for. Doing it here, after the base class has finished
+            rebuilding, is the only point at which the last word is ours. */
+        void refreshTextBoxColours();
+
+        void lookAndFeelChanged() override;
+        void colourChanged() override;
+
     private:
         /** Pixels for the whole range: JUCE's own default, and six times it. Chosen at
             the top of a drag rather than during one -- changing sensitivity underneath
@@ -53,6 +65,16 @@ public:
     };
 
     juce::Slider& getSlider() noexcept { return slider; }
+
+    /** Every colour this takes once rather than reading as it draws. See the note in
+        Theme.h: a colour handed to setColour is a snapshot, and a snapshot does not
+        follow a theme change unless something hands it back. */
+    virtual void applyColours();
+
+    /** Pushes the slider's text-box colours onto the box itself, which copied them when
+        it was made and has held them since. */
+    void refreshTextBoxColours();
+    void lookAndFeelChanged() override { applyColours(); }
 
     void resized() override;
 
@@ -109,15 +131,36 @@ public:
                       const juce::String& parameterID,
                       const juce::String& displayName);
 
+    /** Swaps the palette for a dark surround. The row is built for the light panel
+        along the bottom of the window, where its thumb and readout are near-black;
+        standing on the console background instead, those would be invisible. */
+    void setOnDark();
+
+    /** Trims the name and the readout for a row sharing a strip with other things.
+        The full-width version reserves room for a nine-letter name, which is most of
+        a header on its own. */
+    void setCompact();
+
+    void applyColours() override;
     void resized() override;
 
 private:
     juce::Label rowName;
 
-    /** Room for the name on the left. Wide enough for "SMOOTHING" at the label
-        size, so the two sitting side by side agree about where their tracks start. */
-    static constexpr int nameWidth = 78;
+    /** Which side of the two-tone split this row stands on. Remembered, because a theme
+        change has to put it back the way it was rather than the way rows start out. */
+    bool onDark = false;
 
-    /** And for the value on the right, which the slider draws itself. */
-    static constexpr int valueWidth = 62;
+    /** Room for the name on the left, and for the value on the right that the slider
+        draws itself. Wide enough for a nine-letter name at the label size, so two
+        rows side by side agree about where their tracks start.
+
+        The constants exist separately because the base class is constructed before
+        any member of this one, so the value passed up to it cannot be read from
+        `valueWidth` -- doing that reads it before it has been initialised. */
+    static constexpr int defaultNameWidth = 78;
+    static constexpr int defaultValueWidth = 62;
+
+    int nameWidth = defaultNameWidth;
+    int valueWidth = defaultValueWidth;
 };

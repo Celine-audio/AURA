@@ -50,7 +50,6 @@ ParameterControl::ParameterControl (juce::AudioProcessorValueTreeState& state,
 {
     nameLabel.setText (displayName.toUpperCase(), juce::dontSendNotification);
     nameLabel.setFont (Fonts::bold (10.0f));
-    nameLabel.setColour (juce::Label::textColourId, Theme::textDim());
     nameLabel.setJustificationType (juce::Justification::centred);
     nameLabel.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (nameLabel);
@@ -60,10 +59,6 @@ ParameterControl::ParameterControl (juce::AudioProcessorValueTreeState& state,
     // so they have to be set on the slider itself, and set before setTextBoxStyle.
     slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     slider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
-    slider.setColour (juce::Slider::textBoxTextColourId, Theme::text());
-    slider.setColour (juce::Slider::textBoxHighlightColourId, Theme::accent().withAlpha (0.3f));
-    slider.setColour (juce::Slider::rotarySliderFillColourId, Theme::accent());
-    slider.setColour (juce::Slider::rotarySliderOutlineColourId, Theme::line());
 
     slider.setSliderStyle (style);
     slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, textBoxWidth, 16);
@@ -71,7 +66,51 @@ ParameterControl::ParameterControl (juce::AudioProcessorValueTreeState& state,
 
     attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         state, parameterID, slider);
+
+    applyColours();
 }
+
+void ParameterControl::Slider::refreshTextBoxColours()
+{
+    for (auto* child : getChildren())
+    {
+        auto* box = dynamic_cast<juce::Label*> (child);
+
+        if (box == nullptr)
+            continue;
+
+        box->setColour (juce::Label::textColourId, findColour (textBoxTextColourId));
+        box->setColour (juce::Label::backgroundColourId, findColour (textBoxBackgroundColourId));
+        box->setColour (juce::Label::outlineColourId, findColour (textBoxOutlineColourId));
+    }
+}
+
+void ParameterControl::Slider::lookAndFeelChanged()
+{
+    // The base class rebuilds the text box here, from the colours this slider is
+    // carrying at that moment. Ours go on afterwards, so nothing can undo them.
+    juce::Slider::lookAndFeelChanged();
+    refreshTextBoxColours();
+}
+
+void ParameterControl::Slider::colourChanged()
+{
+    juce::Slider::colourChanged();
+    refreshTextBoxColours();
+}
+
+void ParameterControl::applyColours()
+{
+    nameLabel.setColour (juce::Label::textColourId, Theme::textDim());
+
+    slider.setColour (juce::Slider::textBoxTextColourId, Theme::text());
+    slider.setColour (juce::Slider::textBoxHighlightColourId, Theme::accent().withAlpha (0.3f));
+    slider.setColour (juce::Slider::rotarySliderFillColourId, Theme::accent());
+    slider.setColour (juce::Slider::rotarySliderOutlineColourId, Theme::line());
+
+    slider.refreshTextBoxColours();
+}
+
 
 void ParameterControl::resized()
 {
@@ -122,7 +161,7 @@ FaderControl::FaderControl (juce::AudioProcessorValueTreeState& state,
 SliderRowControl::SliderRowControl (juce::AudioProcessorValueTreeState& state,
                                     const juce::String& parameterID,
                                     const juce::String& displayName)
-    : ParameterControl (state, parameterID, displayName, juce::Slider::LinearHorizontal, valueWidth)
+    : ParameterControl (state, parameterID, displayName, juce::Slider::LinearHorizontal, defaultValueWidth)
 {
     // The base class stacks a name above the slider; this one puts it alongside, so
     // the inherited label is hidden and a second one placed to the left.
@@ -130,19 +169,62 @@ SliderRowControl::SliderRowControl (juce::AudioProcessorValueTreeState& state,
 
     // These two stand on the light panel at the bottom of the window, so every part
     // of them wears the dark ink that goes with it.
-    slider.setColour (juce::Slider::backgroundColourId, Theme::background());
     slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     slider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
-    slider.setColour (juce::Slider::trackColourId, Theme::correction());
-    slider.setColour (juce::Slider::thumbColourId, Theme::textOnPanel());
-    slider.setColour (juce::Slider::textBoxTextColourId, Theme::textOnPanel());
 
     rowName.setText (displayName.toUpperCase(), juce::dontSendNotification);
     rowName.setFont (Fonts::light (11.0f));
-    rowName.setColour (juce::Label::textColourId, Theme::textOnPanel());
     rowName.setJustificationType (juce::Justification::centredRight);
     rowName.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (rowName);
+
+    applyColours();
+}
+
+void SliderRowControl::applyColours()
+{
+    ParameterControl::applyColours();
+
+    // Which side of the two-tone split this row stands on decides every colour on it,
+    // so it is remembered rather than applied once: a theme change has to put the row
+    // back the way it was, not the way rows start out.
+    // Every colour is set on both sides, including the ones the two agree about. A
+    // branch that leaves one alone leaves whatever the other branch last wrote -- which
+    // is how the track stayed on the accent it was built with while everything around
+    // it followed the theme.
+    slider.setColour (juce::Slider::trackColourId, Theme::accent());
+
+    if (onDark)
+    {
+        slider.setColour (juce::Slider::backgroundColourId, Theme::surface());
+        slider.setColour (juce::Slider::thumbColourId, Theme::text());
+        slider.setColour (juce::Slider::textBoxTextColourId, Theme::text());
+        rowName.setColour (juce::Label::textColourId, Theme::textDim());
+    }
+    else
+    {
+        slider.setColour (juce::Slider::backgroundColourId, Theme::background());
+        slider.setColour (juce::Slider::thumbColourId, Theme::textOnPanel());
+        slider.setColour (juce::Slider::textBoxTextColourId, Theme::textOnPanel());
+        rowName.setColour (juce::Label::textColourId, Theme::textOnPanel());
+    }
+
+    slider.refreshTextBoxColours();
+}
+
+void SliderRowControl::setOnDark()
+{
+    onDark = true;
+    applyColours();
+}
+
+void SliderRowControl::setCompact()
+{
+    nameWidth = 22;
+    valueWidth = 44;
+
+    slider.setTextBoxStyle (juce::Slider::TextBoxRight, false, valueWidth, 18);
+    resized();
 }
 
 void SliderRowControl::resized()

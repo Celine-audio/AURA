@@ -20,13 +20,11 @@ namespace
 ExportPanel::ExportPanel (bool linearPhase)
 {
     titleLabel.setFont (Fonts::bold (13.0f));
-    titleLabel.setColour (juce::Label::textColourId, Theme::text());
     addAndMakeVisible (titleLabel);
 
     for (auto* label : { &layoutLabel, &sourceLabel, &phaseLabel })
     {
         label->setFont (Fonts::light (11.5f));
-        label->setColour (juce::Label::textColourId, Theme::textDim());
         addAndMakeVisible (label);
     }
 
@@ -57,8 +55,6 @@ ExportPanel::ExportPanel (bool linearPhase)
     addAndMakeVisible (phaseBox);
 
     exportButton.setTooltip ("Choose where to write the file.");
-    exportButton.setColour (juce::TextButton::buttonColourId, Theme::correction());
-    exportButton.setColour (juce::TextButton::textColourOffId, Theme::chrome());
     exportButton.onClick = [this]
     {
         if (onExport != nullptr)
@@ -75,6 +71,8 @@ ExportPanel::ExportPanel (bool linearPhase)
             box->dismiss();
     };
     addAndMakeVisible (cancelButton);
+
+    applyColours();
 
     refreshLayout();
 }
@@ -120,6 +118,19 @@ void ExportPanel::paint (juce::Graphics& g)
     // Matching the bubble it sits in — see drawCallOutBoxBackground. Filling with
     // anything else would draw a square of it over the rounded corners.
     g.fillAll (Theme::consoleBackground());
+}
+
+void ExportPanel::applyColours()
+{
+    titleLabel.setColour (juce::Label::textColourId, Theme::text());
+
+    for (auto* label : { &layoutLabel, &sourceLabel, &phaseLabel })
+        label->setColour (juce::Label::textColourId, Theme::textDim());
+
+    // The one action here, in the correction's own violet: this is the panel's button,
+    // not a piece of chrome.
+    exportButton.setColour (juce::TextButton::buttonColourId, Theme::correction());
+    exportButton.setColour (juce::TextButton::textColourOffId, Theme::chrome());
 }
 
 void ExportPanel::resized()

@@ -47,6 +47,14 @@ public:
     PluginLookAndFeel();
     ~PluginLookAndFeel() override;
 
+    /** Re-reads every colour out of the theme.
+
+        Its own function because it has to run twice: once at construction, and again
+        whenever the palette moves. Everything JUCE draws for us is told its colours
+        rather than asked for them, so a theme change that did not come back through
+        here would repaint the window in half the new colours and half the old. */
+    void applyPalette();
+
     void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height,
                            float sliderPosProportional, float rotaryStartAngle,
                            float rotaryEndAngle, juce::Slider&) override;

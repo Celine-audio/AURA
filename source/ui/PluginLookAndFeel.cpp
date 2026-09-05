@@ -40,10 +40,15 @@ namespace
 //==============================================================================
 PluginLookAndFeel::PluginLookAndFeel()
 {
-    using namespace Theme;
-
     if (auto face = Fonts::typeface (Fonts::Weight::Light))
         setDefaultSansSerifTypeface (face);
+
+    applyPalette();
+}
+
+void PluginLookAndFeel::applyPalette()
+{
+    using namespace Theme;
 
     setColour (juce::ResizableWindow::backgroundColourId, chrome());
     setColour (juce::DocumentWindow::textColourId, text());
@@ -115,7 +120,6 @@ PluginLookAndFeel::PluginLookAndFeel()
     setColour (juce::AlertWindow::backgroundColourId, chrome());
     setColour (juce::AlertWindow::textColourId, text());
     setColour (juce::AlertWindow::outlineColourId, line());
-
 }
 
 PluginLookAndFeel::~PluginLookAndFeel() = default;

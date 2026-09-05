@@ -39,6 +39,10 @@ public:
 
     juce::TextButton& getActionButton() noexcept { return action; }
 
+    /** The colours this takes once rather than reading as it draws. See Theme.h. */
+    void applyColours();
+    void lookAndFeelChanged() override { applyColours(); }
+
     /** Called when the body (not the action button) is clicked. */
     std::function<void()> onSelect;
 

@@ -19,12 +19,7 @@ PhaseTab::PhaseTab (const juce::String& tabTitle, const juce::String& actionText
                     juce::Colour tabAccent, bool armsCapture)
     : title (tabTitle), accent (tabAccent), action (actionText), arms (armsCapture)
 {
-    // Red is what "this is armed" looks like everywhere else in the plugin, so the
-    // action button borrows it whether it is a Learn or the Match.
-    action.setColour (juce::TextButton::buttonColourId, Theme::record().withAlpha (0.22f));
-    action.setColour (juce::TextButton::buttonOnColourId, Theme::record());
-    action.setColour (juce::TextButton::textColourOffId, Theme::record().brighter (0.35f));
-    action.setColour (juce::TextButton::textColourOnId, juce::Colours::white);
+    applyColours();
 
     // Said on the button rather than only in the tab's own status line, because the
     // button is what the pointer is over when the question comes up.
@@ -54,6 +49,16 @@ void PhaseTab::setSelected (bool shouldBeSelected)
 
     selected = shouldBeSelected;
     repaint();
+}
+
+void PhaseTab::applyColours()
+{
+    // Red is what "this is armed" looks like everywhere else in the plugin, so the
+    // action button borrows it whether it is a Learn or the Match.
+    action.setColour (juce::TextButton::buttonColourId, Theme::record().withAlpha (0.22f));
+    action.setColour (juce::TextButton::buttonOnColourId, Theme::record());
+    action.setColour (juce::TextButton::textColourOffId, Theme::record().brighter (0.35f));
+    action.setColour (juce::TextButton::textColourOnId, Theme::text());
 }
 
 void PhaseTab::setStatus (const juce::String& newStatus, bool stageHasData)

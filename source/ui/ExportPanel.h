@@ -28,6 +28,10 @@ public:
     void paint (juce::Graphics&) override;
 
 private:
+    /** The colours this takes once rather than reading as it draws. See Theme.h. */
+    void applyColours();
+    void lookAndFeelChanged() override { applyColours(); }
+
     bool isMono() const;
     void refreshLayout();
     IrExport::Options currentOptions() const;

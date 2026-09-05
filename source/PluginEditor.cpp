@@ -170,6 +170,10 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     display.setView (viewFor (tabBar.getSelected()));
     processorRef.setUiActive (true);
 
+    // The theme is process-wide, so a colour changed in one window has to reach every
+    // other -- including this one, when the change was made somewhere else.
+    Theme::palette().addChangeListener (this);
+
     // Restore whatever size the user last left the window at.
     //
     // Read before setResizeLimits, not after. That call constrains the bounds it finds
@@ -201,6 +205,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
 PluginEditor::~PluginEditor()
 {
+    Theme::palette().removeChangeListener (this);
+
     stopTimer();
     processorRef.setUiActive (false);
     setLookAndFeel (nullptr);
@@ -390,6 +396,20 @@ void PluginEditor::beginBandGesture (SpectrumDisplay::BandEdge edge, bool starti
         starting ? parameter->beginChangeGesture() : parameter->endChangeGesture();
 }
 
+void PluginEditor::changeListenerCallback (juce::ChangeBroadcaster*)
+{
+    // Everything JUCE draws for us is *told* its colours, so the look and feel has to
+    // re-read them before anything repaints -- see PluginLookAndFeel::applyPalette.
+    lookAndFeel.applyPalette();
+
+    // And every child that took a colour once and kept it gets a chance to take it
+    // again. JUCE walks the tree for us; a control that snapshots colours says so by
+    // overriding lookAndFeelChanged().
+    sendLookAndFeelChange();
+
+    repaint();
+}
+
 void PluginEditor::applyPanelColours()
 {
     // The bottom band is the design's near-white panel. Everything standing on it
@@ -417,6 +437,10 @@ void PluginEditor::refreshBypassLook()
 void PluginEditor::showSettingsMenu()
 {
     juce::PopupMenu menu;
+
+    juce::PopupMenu::Item theme ("Theme" + ellipsis);
+    theme.setAction ([this] { showThemeWindow (this); });
+    menu.addItem (theme);
 
     juce::PopupMenu::Item about ("About " + juce::String (JucePlugin_Name) + ellipsis);
     about.setAction ([this] { showAboutWindow (this); });

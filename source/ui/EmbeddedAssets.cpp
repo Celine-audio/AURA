@@ -1,7 +1,8 @@
 #include "EmbeddedAssets.h"
-#include <vector>
-#include <limits>
+
 #include <algorithm>
+#include <limits>
+#include <vector>
 
 #include <BinaryData.h>
 
@@ -58,6 +59,7 @@ namespace Celine::Assets
             for (int i = 0; i < composite->getNumChildren(); ++i)
                 tint(composite->getChild(i), colour);
     }
+
     //==========================================================================
     namespace
     {

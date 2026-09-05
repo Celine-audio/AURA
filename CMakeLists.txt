@@ -35,7 +35,7 @@ set(BUNDLE_ID "com.celineaudio.aura")
 
 # Change me! Set the plugin formats you want built
 # Valid choices: AAX Unity VST VST3 AU AUv3 LV2 Standalone
-set(FORMATS AU VST3 LV2)
+set(FORMATS AAX AU VST3 LV2)
 
 # Force JUCE to work with sccache
 # instruct MSVC to embed debug info (/Z7) instead of emitting a .pdb

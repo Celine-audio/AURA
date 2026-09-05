@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include "ui/AboutPanel.h"
+#include "ui/ThemePanel.h"
 #include "ui/ExportPanel.h"
 #include "ui/PluginLookAndFeel.h"
 #include "ui/Theme.h"
@@ -12,7 +13,8 @@
 
 //==============================================================================
 class PluginEditor : public juce::AudioProcessorEditor,
-                     private juce::Timer
+                     private juce::Timer,
+                     private juce::ChangeListener
 {
 public:
     explicit PluginEditor (PluginProcessor&);
@@ -75,7 +77,15 @@ private:
 
     // The bottom band is the design's light panel, so everything standing on it has
     // to flip to dark ink. Done once, after construction, rather than at each site.
+    /** The bottom band's controls stand on the light panel, so they carry dark ink
+        rather than the chrome's. Called at construction and again whenever the theme
+        moves -- see the note in Theme.h about snapshots. */
     void applyPanelColours();
+
+    /** The theme moved. Re-reads the look and feel's colours, tells every child, and
+        repaints -- which is the whole of what a theme change is from here. */
+    void changeListenerCallback (juce::ChangeBroadcaster*) override;
+    void lookAndFeelChanged() override { applyPanelColours(); }
 
     // Linear phase or minimum phase: the same curve, realised two ways, and the only
     // control here that changes what the plugin costs in latency.

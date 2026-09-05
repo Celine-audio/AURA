@@ -26,6 +26,10 @@ public:
     juce::TextButton close { "Close" };
 
 private:
+    /** The colours this takes once rather than reading as it draws. See Theme.h. */
+    void applyColours();
+    void lookAndFeelChanged() override { applyColours(); }
+
     // Its own, not the editor's. This panel lives in a DialogWindow, which is a
     // desktop window with no parent component, so it inherits nothing from the editor
     // and was drawing itself in JUCE's default grey.
