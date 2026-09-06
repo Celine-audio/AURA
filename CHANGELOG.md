@@ -77,6 +77,16 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Fixed
 
+- **The yellow ring around whatever you were editing is gone.** JUCE draws a focus
+  outline as a separate desktop window, and its default is a rounded rectangle at a fixed
+  radius of three — so on a field rounded to the house radius it traced a shape the
+  control does not have, sitting slightly off its corners. It also lived only as long as
+  that window did, which is why it appeared on one launch and not the next. Nothing here
+  needs it: a field being edited says so with its caret and its selection.
+- **The theme editor's own Close button follows the accent it is showing you.** Its
+  colours were set once when the window opened, so picking a new accent recoloured every
+  other control in the plugin and left the button next to the swatch on the old one. The
+  window's title, subtitle and status line had the same fault.
 - **The toolbar's mark did not follow the theme.** The logo and the wordmark were tinted
   once when the window opened, and tinting is destructive — so they stayed on whatever
   colour the theme happened to be at that moment.

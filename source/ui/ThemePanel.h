@@ -57,6 +57,11 @@ namespace Celine
                 reset. */
             void refresh();
 
+            /** The colours this row hands to its children rather than reading as it
+                paints. */
+            void applyColours();
+            void lookAndFeelChanged() override { applyColours(); }
+
         private:
             void applyTypedText();
 
@@ -83,6 +88,13 @@ namespace Celine
     /** Writes the colours to this plugin's theme file. Nothing else does. */
     void saveTheme();
     void resetTheme();
+
+        /** Everything this window hands to a child rather than reading as it paints --
+            its own title, status line and Close button included. The rows look after
+            themselves; this is the panel's own chrome, which used to be set once and
+            then sat on the old palette while everything around it moved. */
+        void applyColours();
+        void lookAndFeelChanged() override { applyColours(); }
 
         void refreshRows();
         void changeListenerCallback (juce::ChangeBroadcaster*) override;

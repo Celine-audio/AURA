@@ -743,6 +743,12 @@ void LookAndFeelBase::drawPopupMenuSectionHeader (juce::Graphics& g,
     g.drawFittedText (sectionName, r, juce::Justification::centredLeft, 1);
 }
 
+std::unique_ptr<juce::FocusOutline> LookAndFeelBase::createFocusOutlineForComponent (juce::Component&)
+{
+    // Explicitly handled by Desktop::updateFocusOutline, which checks for null.
+    return nullptr;
+}
+
 juce::Font LookAndFeelBase::getLabelFont (juce::Label& label)
 {
     // A label that has asked for a particular face keeps it.

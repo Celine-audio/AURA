@@ -34,7 +34,6 @@ ThemePanel::Row::Row (Theme::Role roleToEdit, ThemePanel& panel)
 
     name.setText (entry.label, juce::dontSendNotification);
     name.setFont (Fonts::light (12.5f));
-    name.setColour (juce::Label::textColourId, Theme::textDim());
     name.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (name);
 
@@ -44,16 +43,21 @@ ThemePanel::Row::Row (Theme::Role roleToEdit, ThemePanel& panel)
     hex.setJustification (juce::Justification::centred);
     hex.setBorder (juce::BorderSize<int> (0));
     hex.setIndents (0, 0);
-    hex.setColour (juce::TextEditor::backgroundColourId, Theme::background());
-    hex.setColour (juce::TextEditor::textColourId, Theme::textDim());
-    hex.setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
-    hex.setColour (juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
     hex.setTooltip ("The colour as a hex value. Paste one in, or read one off.");
     hex.onReturnKey = [this] { applyTypedText(); };
     hex.onFocusLost = [this] { applyTypedText(); };
     addAndMakeVisible (hex);
 
     refresh();
+}
+
+void ThemePanel::Row::applyColours()
+{
+    name.setColour (juce::Label::textColourId, Theme::textDim());
+    hex.setColour (juce::TextEditor::backgroundColourId, Theme::background());
+    hex.setColour (juce::TextEditor::textColourId, Theme::textDim());
+    hex.setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
+    hex.setColour (juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
 }
 
 void ThemePanel::Row::refresh()
@@ -126,7 +130,6 @@ ThemePanel::ThemePanel()
     title.setText ("Theme", juce::dontSendNotification);
     title.setFont (Fonts::logo (22.0f));
     title.getProperties().set (keepFontProperty, true);
-    title.setColour (juce::Label::textColourId, Theme::text());
     addAndMakeVisible (title);
 
     subtitle.setText (juce::String::fromUTF8 (
@@ -134,7 +137,6 @@ ThemePanel::ThemePanel()
                           "Save keeps them."),
                       juce::dontSendNotification);
     subtitle.setFont (Fonts::light (11.5f));
-    subtitle.setColour (juce::Label::textColourId, Theme::comment());
     subtitle.setJustificationType (juce::Justification::topLeft);
     addAndMakeVisible (subtitle);
 
@@ -182,15 +184,13 @@ ThemePanel::ThemePanel()
     addAndMakeVisible (resetButton);
 
     status.setFont (Fonts::light (11.0f));
-    status.setColour (juce::Label::textColourId, Theme::comment());
     status.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (status);
 
-    close.setColour (juce::TextButton::buttonColourId, Theme::accent());
-    close.setColour (juce::TextButton::textColourOffId, Theme::chrome());
     addAndMakeVisible (close);
 
     Theme::palette().addChangeListener (this);
+    applyColours();
     refreshRows();
 
     // Last, and it matters: setSize fires resized(), which lays out rows that have to
@@ -239,6 +239,15 @@ void ThemePanel::changeListenerCallback (juce::ChangeBroadcaster* source)
     lookAndFeel.applyPalette();
     sendLookAndFeelChange();
     repaint();
+}
+
+void ThemePanel::applyColours()
+{
+    title.setColour (juce::Label::textColourId, Theme::text());
+    subtitle.setColour (juce::Label::textColourId, Theme::comment());
+    status.setColour (juce::Label::textColourId, Theme::comment());
+    close.setColour (juce::TextButton::buttonColourId, Theme::accent());
+    close.setColour (juce::TextButton::textColourOffId, Theme::chrome());
 }
 
 void ThemePanel::refreshRows()
