@@ -487,28 +487,108 @@ void ThemePanel::resized()
 }
 
 //==============================================================================
+void ThemePanel::confirmClose (std::function<void (bool)> whenDecided)
+{
+    if (! Theme::palette().hasUnsavedChanges())
+    {
+        whenDecided (true);
+        return;
+    }
+
+    const auto options =
+        juce::MessageBoxOptions()
+            .withIconType (juce::MessageBoxIconType::QuestionIcon)
+            .withTitle ("Warning")
+            .withMessage ("The theme has been changed and not saved. Closing without "
+                          "saving will discard the changes.")
+            .withButton ("Save")
+            .withButton ("Discard")
+            .withButton ("Cancel")
+            .withAssociatedComponent (this);
+
+    juce::NativeMessageBox::showAsync (
+        options,
+        [safe = juce::Component::SafePointer<ThemePanel> (this),
+         decided = std::move (whenDecided)] (int chosen)
+        {
+            if (safe == nullptr)
+                return;
+
+            if (chosen == 0)
+                safe->saveTheme();
+            else if (chosen == 1)
+                Theme::palette().revert();   // back to the last saved theme
+
+            decided (chosen != 2);
+        });
+}
+
+namespace
+{
+    /** The theme editor's window.
+
+        Its own class rather than DialogWindow::LaunchOptions, because every way out has
+        to go through the same question -- the Close button, the escape key and the
+        title bar's own close button all end up here. */
+    class ThemeWindow final : public juce::DialogWindow
+    {
+    public:
+        ThemeWindow (ThemePanel* content, juce::Component* around)
+            : juce::DialogWindow ("Theme", Theme::chrome(), true, true,
+                                  // The scale the editor is being shown at. A dialog
+                                  // opened from a plugin window on a scaled display and
+                                  // told nothing about it comes up the wrong size.
+                                  around != nullptr
+                                      ? juce::Component::getApproximateScaleFactorForComponent (around)
+                                      : 1.0f)
+        {
+            setUsingNativeTitleBar (true);
+            setResizable (true, false);
+            setContentOwned (content, true);
+            setResizeLimits (ThemePanel::minimumWidth, ThemePanel::minimumHeight,
+                             ThemePanel::minimumWidth * 2, ThemePanel::minimumHeight * 2);
+
+            if (around != nullptr)
+                centreAroundComponent (around, getWidth(), getHeight());
+            else
+                centreWithSize (getWidth(), getHeight());
+
+            // Without this the window opens *behind* the plugin in a host that keeps its
+            // own windows on top -- Ableton does -- and there is then no way to reach it
+            // except by closing the plugin. DialogWindow::LaunchOptions does this for
+            // you, which is exactly what was lost by building the window by hand.
+            setAlwaysOnTop (juce::WindowUtils::areThereAnyAlwaysOnTopWindows());
+
+            setVisible (true);
+        }
+
+        void closeButtonPressed() override
+        {
+            if (auto* panel = dynamic_cast<ThemePanel*> (getContentComponent()))
+            {
+                panel->confirmClose ([safe = juce::Component::SafePointer<ThemeWindow> (this)] (bool allowed)
+                                     {
+                                         if (allowed && safe != nullptr)
+                                             safe->exitModalState (0);
+                                     });
+
+                return;
+            }
+
+            exitModalState (0);
+        }
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThemeWindow)
+    };
+}
+
 void Celine::showThemeWindow (juce::Component* associatedComponent)
 {
-    auto panel = std::make_unique<ThemePanel>();
+    auto* panel = new ThemePanel();
+    auto* window = new ThemeWindow (panel, associatedComponent);
 
-    juce::DialogWindow::LaunchOptions options;
-    options.dialogTitle = "Theme";
-    options.dialogBackgroundColour = Theme::chrome();
-    options.escapeKeyTriggersCloseButton = true;
-    options.useNativeTitleBar = true;
-    options.resizable = true;
-    options.componentToCentreAround = associatedComponent;
+    // Self-deleting once dismissed, which is what launchAsync used to do for us.
+    window->enterModalState (true, nullptr, true);
 
-    auto* raw = panel.get();
-    options.content.setOwned (panel.release());
-
-    auto* window = options.launchAsync();
-
-    if (window != nullptr)
-    {
-        window->setResizeLimits (ThemePanel::minimumWidth, ThemePanel::minimumHeight,
-                                 ThemePanel::minimumWidth * 2, ThemePanel::minimumHeight * 2);
-
-        raw->close.onClick = [window] { window->exitModalState (0); };
-    }
+    panel->close.onClick = [window] { window->closeButtonPressed(); };
 }

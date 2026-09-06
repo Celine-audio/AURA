@@ -49,7 +49,13 @@ namespace
 
         // Frames overlap by 50%, so each one adds half a window of new audio.
         const auto seconds = (double) frames * (double) (fftSize / 2) / sampleRate;
-        return juce::String (seconds, seconds < 10.0 ? 1 : 0) + " s learned";
+        // Rounded to a whole second past ten, and *not* by asking String for zero
+        // decimal places: to juce::String, zero means "as many as it takes" -- it is
+        // what the plain String(double) constructor passes -- so past ten seconds this
+        // printed the double in full, all fifteen digits of it.
+        return (seconds < 10.0 ? juce::String (seconds, 1)
+                               : juce::String (juce::roundToInt (seconds)))
+               + " s learned";
     }
 
     SpectrumDisplay::View viewFor (PhaseTabBar::Stage stage)
@@ -155,8 +161,6 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     {
         beginBandGesture (edge, starting);
     };
-
-    applyPanelColours();
 
     display.setFftSize (processorRef.getFftSize());
     display.setView (viewFor (tabBar.getSelected()));
@@ -368,7 +372,7 @@ void PluginEditor::refreshDisplay()
     const auto needsMatch = display.getView() == SpectrumDisplay::View::eqCurve && ! curves.isValid();
 
     display.setOverlayMessage (bypassed   ? "Bypassed"
-                             : needsMatch ? "Learn a current and a reference signal, then press Match"
+                             : needsMatch ? "Record a current and reference signal, then press Match"
                                           : juce::String());
 
     display.repaint();
@@ -395,6 +399,11 @@ void PluginEditor::beginBandGesture (SpectrumDisplay::BandEdge edge, bool starti
 
 void PluginEditor::applyColours()
 {
+    // The bottom band's own controls, which take their colours rather than reading them.
+    // This used to run once at construction, so a theme change reached everything in the
+    // window except the three things standing on the light panel.
+    applyPanelColours();
+
     // Explicitly chosen, so explicitly handed back: an override set once is a snapshot
     // like any other, and this one is the whole of what "bypassed" looks like.
     bypassButton.setActiveColour (Theme::danger());
@@ -606,8 +615,12 @@ void PluginEditor::resized()
         {
             const auto ink = wordmark->getDrawableBounds();
             const auto aspect = ink.getHeight() > 0.0f ? ink.getWidth() / ink.getHeight() : 1.0f;
-            constexpr int wordmarkHeight = 14;
-            const auto wordmarkWidth = juce::roundToInt (wordmarkHeight * aspect);
+            // Sized by the letters rather than by the ink box: see
+            // Assets::xHeightFraction. A word with an ascender or a descender needs a
+            // taller box to put the same sized letters in it.
+            const auto wordmarkHeight =
+                juce::roundToInt (14.0f / Celine::Assets::xHeightFraction (*wordmark));
+            const auto wordmarkWidth = juce::roundToInt ((float) wordmarkHeight * aspect);
 
             wordmarkBounds = header.removeFromLeft (wordmarkWidth)
                                    .withSizeKeepingCentre (wordmarkWidth, wordmarkHeight);

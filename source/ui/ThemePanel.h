@@ -39,6 +39,14 @@ namespace Celine
 
         juce::TextButton close { "Close" };
 
+        /** Decides whether this window may close, asking first if there are colours
+            that have not been saved.
+
+            Calls back with true to go ahead and false to stay open. Asynchronous
+            because the question is a dialog, and a plugin must never block a host's
+            message thread waiting for an answer. */
+        void confirmClose (std::function<void (bool)> whenDecided);
+
     private:
         //======================================================================
         /** One colour: what it is called, the swatch that opens a picker, and the hex

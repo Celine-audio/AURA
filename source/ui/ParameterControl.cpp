@@ -82,6 +82,40 @@ void ParameterControl::Slider::refreshTextBoxColours()
         box->setColour (juce::Label::textColourId, findColour (textBoxTextColourId));
         box->setColour (juce::Label::backgroundColourId, findColour (textBoxBackgroundColourId));
         box->setColour (juce::Label::outlineColourId, findColour (textBoxOutlineColourId));
+
+        // And the same again for the state the box is in while you are typing in it.
+        //
+        // A label being edited takes a *different* set of colours, and left unsaid they
+        // come from the look and feel -- which knows nothing about which side of the
+        // two-tone split this particular row stands on. Editing is not a change of ink;
+        // it is the same readout with a caret in it.
+        const auto ink = findColour (textBoxTextColourId);
+
+        box->setColour (juce::Label::textWhenEditingColourId, ink);
+        box->setColour (juce::Label::backgroundWhenEditingColourId, findColour (textBoxBackgroundColourId));
+        box->setColour (juce::Label::outlineWhenEditingColourId, juce::Colours::transparentBlack);
+
+        // The *selection* colours, and these are the ones that actually turned the digits
+        // white on the light strip. Opening the editor selects the whole value, so what
+        // you see the instant you click in is not the text colour at all -- it is
+        // highlightedTextColourId, which the look and feel sets for the dark half of the
+        // design because it has no way of knowing this row is on the other one.
+        //
+        // Set on the Label rather than the editor: Label copies every colour explicitly
+        // set on it across to the editor it makes, TextEditor ids included, and the
+        // editor does not exist yet to be told directly.
+        box->setColour (juce::TextEditor::textColourId, ink);
+        box->setColour (juce::TextEditor::highlightedTextColourId, ink);
+
+        // A wash of the ink rather than a fixed colour, so the selection reads on either
+        // side of the split without knowing which one it is on.
+        box->setColour (juce::TextEditor::highlightColourId, ink.withAlpha (0.22f));
+
+        // And the caret, which is the last thing in the box still taking its colour from
+        // the look and feel. It resolves with inheritFromParent, so it finds this on the
+        // way up from the editor -- white on the light strip means a text cursor you
+        // cannot see at all.
+        box->setColour (juce::CaretComponent::caretColourId, ink);
     }
 }
 
