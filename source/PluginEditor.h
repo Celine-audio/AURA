@@ -84,6 +84,10 @@ private:
 
     /** The theme moved. Re-reads the look and feel's colours, tells every child, and
         repaints -- which is the whole of what a theme change is from here. */
+    /** Every colour this window hands to a child rather than reading as it paints.
+        Called from the constructor and again on every theme change. */
+    void applyColours();
+
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void lookAndFeelChanged() override { applyPanelColours(); }
 

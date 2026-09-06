@@ -46,11 +46,29 @@ namespace Celine
         /** The light panels. */
         inline juce::Colour panel() { return colour (Role::panel); }
 
-        /** Buttons, fields, dropdowns -- the dark slate that sits on chrome. */
+        /** The dark slate that sits on chrome: the popup panel, the tooltip, and
+            anything else that is a surface rather than a control. */
         inline juce::Colour surface() { return colour (Role::surface); }
 
         /** Hover and selection, a step up from surface. */
         inline juce::Colour surfaceBright() { return colour (Role::surfaceBright); }
+
+        /** What a button is filled with -- text buttons, icon buttons, and a dropdown,
+            which is a button that opens a menu.
+
+            Its own role rather than surface(), which it ships equal to: a button is a
+            thing you press and a surface is a thing you read, and a theme that could
+            not tell them apart could not make the controls stand out from the panels
+            they sit on. surfaceBright() is still the hover, for both. */
+        inline juce::Colour button() { return colour (Role::button); }
+
+        /** What a text field is filled with -- anything you type into.
+
+            Ships equal to background(), the darkest ground, because a field reads as a
+            hole you put something in rather than as a raised control. Separate for the
+            same reason button() is: a theme has to be able to say where typing happens
+            without moving the canvas with it. */
+        inline juce::Colour field() { return colour (Role::field); }
 
         /** Borders. */
         inline juce::Colour line() { return colour (Role::line); }

@@ -11,7 +11,8 @@
     whole thing rather than a trimmed summary — a licence summary edited to fit a
     layout is a licence summary that has been changed.
 */
-class AboutPanel : public juce::Component
+class AboutPanel : public juce::Component,
+                   private juce::ChangeListener
 {
 public:
     /** Below this the footer's marks start overlapping the Close button. */
@@ -29,6 +30,11 @@ private:
     /** The colours this takes once rather than reading as it draws. See Theme.h. */
     void applyColours();
     void lookAndFeelChanged() override { applyColours(); }
+
+    /** This is a desktop window of its own, so the editor's `sendLookAndFeelChange`
+        never reaches it -- it has to hear about a theme change directly or it sits
+        there on the old colours while the window behind it changes. */
+    void changeListenerCallback (juce::ChangeBroadcaster*) override;
 
     // Its own, not the editor's. This panel lives in a DialogWindow, which is a
     // desktop window with no parent component, so it inherits nothing from the editor

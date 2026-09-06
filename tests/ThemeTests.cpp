@@ -174,3 +174,130 @@ TEST_CASE ("Every colour is reachable through the file", "[theme]")
         CHECK (palette.get ((Theme::Role) i) == juce::Colour (0xff123456));
     }
 }
+
+TEST_CASE ("editing a colour does not touch the disk", "[theme]")
+{
+    /*
+        The whole of why Save exists. A colour picker sends a change per mouse move, and
+        a preference is not worth a file per mouse move -- so editing changes what is on
+        screen and nothing else, and the disk is touched when somebody asks for it.
+    */
+    using namespace Celine::Theme;
+
+    const auto suiteFile = Palette::storedFile();
+    const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                          .getChildFile ("celine-theme-explicit.celthm");
+    file.deleteFile();
+    Palette::useFileForTesting (file);
+
+    {
+        Palette editing;
+        CHECK_FALSE (editing.hasUnsavedChanges());
+
+        editing.set (Role::accent, juce::Colour (0xff123456));
+
+        CHECK (editing.hasUnsavedChanges());
+        CHECK_FALSE (file.existsAsFile());       // nothing written, and nothing scheduled
+
+        // Not even on the way out: closing without saving is how you discard a theme.
+    }
+
+    CHECK_FALSE (file.existsAsFile());
+
+    Palette::useFileForTesting (suiteFile);
+    file.deleteFile();
+}
+
+TEST_CASE ("a saved theme is still there next time", "[theme]")
+{
+    using namespace Celine::Theme;
+
+    const auto suiteFile = Palette::storedFile();
+    const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                          .getChildFile ("celine-theme-persistence.celthm");
+    file.deleteFile();
+    Palette::useFileForTesting (file);
+
+    const auto picked = juce::Colour (0xff123456);
+
+    {
+        Palette chooser;
+        chooser.set (Role::accent, picked);
+        chooser.store();
+
+        CHECK_FALSE (chooser.hasUnsavedChanges());
+    }
+
+    REQUIRE (file.existsAsFile());
+
+    Palette nextSession;
+    CHECK (nextSession.get (Role::accent) == picked);
+    CHECK_FALSE (nextSession.hasUnsavedChanges());
+
+    // And the rest of the palette came back with it rather than being reset.
+    CHECK (nextSession.get (Role::chrome) == juce::Colour (info()[(size_t) Role::chrome].shipped));
+
+    Palette::useFileForTesting (suiteFile);
+    file.deleteFile();
+}
+
+TEST_CASE ("one instance's saved theme reaches another", "[theme]")
+{
+    /*
+        Each plugin format is its own loaded module with its own copy of everything
+        static, so the VST3 and the AU open in one session are two palettes that never
+        meet. They are brought into step when a window opens, not by watching the disk.
+    */
+    using namespace Celine::Theme;
+
+    const auto suiteFile = Palette::storedFile();
+    const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                          .getChildFile ("celine-theme-sync.celthm");
+    file.deleteFile();
+    Palette::useFileForTesting (file);
+
+    Palette asVst3;
+    Palette asAu;
+
+    const auto picked = juce::Colour (0xff654321);
+
+    asVst3.set (Role::accent, picked);
+    asVst3.store();
+
+    CHECK (asAu.get (Role::accent) != picked);   // it has not looked yet
+
+    asAu.refreshFromDisk();
+    CHECK (asAu.get (Role::accent) == picked);
+
+    SECTION ("colours being chosen are not overwritten by another instance")
+    {
+        // Opening a second window must not take away what somebody is in the middle of
+        // picking in this one.
+        const auto mine = juce::Colour (0xffabcdef);
+        asAu.set (Role::danger, mine);
+
+        asVst3.set (Role::danger, juce::Colours::lime);
+        asVst3.store();
+
+        asAu.refreshFromDisk();
+        CHECK (asAu.get (Role::danger) == mine);
+    }
+
+    Palette::useFileForTesting (suiteFile);
+    file.deleteFile();
+}
+
+TEST_CASE ("each plugin keeps its own theme", "[theme]")
+{
+    // Per plugin, not per house: a cab loader and a circuit designer are not obliged to
+    // look the same. Cross-compatible on import is a separate promise, kept by the
+    // forgiving-file rules above.
+    const auto suiteFile = Celine::Theme::Palette::storedFile();
+    Celine::Theme::Palette::useFileForTesting (juce::File{});
+
+    const auto real = Celine::Theme::Palette::storedFile();
+    CHECK (real.getFileNameWithoutExtension() == juce::String (PRODUCT_NAME_WITHOUT_VERSION));
+    CHECK (real.getFileExtension() == juce::String (Celine::Theme::Palette::fileExtension));
+
+    Celine::Theme::Palette::useFileForTesting (suiteFile);
+}

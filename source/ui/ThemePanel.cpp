@@ -130,8 +130,8 @@ ThemePanel::ThemePanel()
     addAndMakeVisible (title);
 
     subtitle.setText (juce::String::fromUTF8 (
-                          "Every colour this plugin draws with. Changes show at once, and are "
-                          "shared with the other C\xc3\xa9line plugins."),
+                          "Every colour this plugin draws with. Changes show at once; "
+                          "Save keeps them."),
                       juce::dontSendNotification);
     subtitle.setFont (Fonts::light (11.5f));
     subtitle.setColour (juce::Label::textColourId, Theme::comment());
@@ -171,6 +171,11 @@ ThemePanel::ThemePanel()
     exportButton.setTooltip ("Write these colours to a .celthm file to keep or to share.");
     exportButton.onClick = [this] { exportTheme(); };
     addAndMakeVisible (exportButton);
+
+    saveButton.setTooltip ("Keep these colours. Until this is pressed a change is only "
+                           "on screen, which is what lets you try one and walk away from it.");
+    saveButton.onClick = [this] { saveTheme(); };
+    addAndMakeVisible (saveButton);
 
     resetButton.setTooltip ("Put every colour back to the one the plugin ships with.");
     resetButton.onClick = [this] { resetTheme(); };
@@ -243,10 +248,17 @@ void ThemePanel::refreshRows()
 
     const auto name = Theme::palette().getName();
 
-    status.setText (Theme::palette().isShipped() ? juce::String ("Shipped colours")
-                    : name.isNotEmpty()          ? name
-                                                 : juce::String ("Edited"),
+    const auto unsaved = Theme::palette().hasUnsavedChanges();
+
+    status.setText (unsaved                      ? juce::String ("Unsaved changes")
+                    : Theme::palette().isShipped() ? juce::String ("Shipped colours")
+                    : name.isNotEmpty()            ? name
+                                                   : juce::String ("Saved"),
                     juce::dontSendNotification);
+
+    // Lit only while there is something to keep, so the button says whether it has
+    // anything to do rather than sitting there inviting a pointless write.
+    saveButton.setEnabled (unsaved);
 }
 
 void ThemePanel::report (const juce::String& message)
@@ -261,16 +273,25 @@ void ThemePanel::openPickerFor (Theme::Role role, juce::Rectangle<int> swatchOnS
 
     // JUCE's own picker, in the kit's call-out box -- which the look and feel already
     // draws, so it arrives wearing the plugin rather than the system.
+    // The edge gap is generous on purpose. JUCE builds the colour space and the hue
+    // strip as square panels and keeps them to itself -- there is no way to round them
+    // from out here -- so the next best thing is to stop anything square from being
+    // flush with the bubble's rounded edge, where the two shapes fight.
     auto selector = std::make_unique<juce::ColourSelector> (
         juce::ColourSelector::showColourAtTop | juce::ColourSelector::showSliders
             | juce::ColourSelector::showColourspace,
-        4, 6);
+        12, 8);
 
     selector->setName (Theme::info()[(size_t) role].label);
     selector->setCurrentColour (Theme::colour (role), juce::dontSendNotification);
-    selector->setSize (256, 300);
+
+    // Room for the three slider rows, which were sitting on the bottom edge.
+    selector->setSize (280, 336);
     selector->setLookAndFeel (&lookAndFeel);
-    selector->setColour (juce::ColourSelector::backgroundColourId, Theme::surface());
+
+    // Transparent, so the call-out bubble is the only ground. Filled, it painted a
+    // square of surface() inside a rounded bubble and the corners showed.
+    selector->setColour (juce::ColourSelector::backgroundColourId, juce::Colours::transparentBlack);
     selector->setColour (juce::ColourSelector::labelTextColourId, Theme::text());
 
     // This panel listens, rather than something owned by the box: one picker is open at
@@ -304,10 +325,7 @@ void ThemePanel::importTheme()
                               const auto result = Theme::palette().loadFrom (file);
 
                               if (result.wasOk())
-                              {
-                                  Theme::palette().store();
                                   report ("Loaded " + file.getFileName());
-                              }
                               else
                               {
                                   report (result.getErrorMessage());
@@ -347,15 +365,23 @@ void ThemePanel::exportTheme()
                               report (result.wasOk() ? "Saved " + file.getFileName()
                                                      : result.getErrorMessage());
 
-                              if (result.wasOk())
-                                  Theme::palette().store();
                           });
+}
+
+void ThemePanel::saveTheme()
+{
+    Theme::palette().store();
+
+    // The swatches have not moved; what has changed is whether there is anything left
+    // to save, which is what the status line and the button's own state say.
+    refreshRows();
 }
 
 void ThemePanel::resetTheme()
 {
+    // Not stored here: the palette writes itself whenever it changes, which is what
+    // stops a colour picked in the one place nobody thought to save from being lost.
     Theme::palette().reset();
-    Theme::palette().store();
     report ("Shipped colours");
 }
 
@@ -373,15 +399,27 @@ void ThemePanel::paint (juce::Graphics& g)
     g.setColour (Theme::consoleBackground());
     g.fillRoundedRectangle (panel.toFloat(), Theme::cornerRadius);
 
-    g.setColour (Theme::comment());
-    g.setFont (Fonts::light (10.0f));
+    // Clipped to the list they belong to.
+    //
+    // These are painted here rather than by the scrolled component, in its coordinates
+    // shifted by the scroll position -- so without this a heading scrolled past the top
+    // carries on being drawn above the list, over the subtitle and the footer. It showed
+    // up as headings appearing in the middle of the window whenever something made the
+    // panel repaint under the colour picker.
+    {
+        const juce::Graphics::ScopedSaveState clipped (g);
+        g.reduceClipRegion (scroller.getBounds());
 
-    for (const auto& heading : headings)
-        if (! heading.bounds.isEmpty())
-            g.drawText (heading.text,
-                        heading.bounds.translated (scroller.getX() - scroller.getViewPositionX(),
-                                                   scroller.getY() - scroller.getViewPositionY()),
-                        juce::Justification::bottomLeft, false);
+        g.setColour (Theme::comment());
+        g.setFont (Fonts::light (10.0f));
+
+        for (const auto& heading : headings)
+            if (! heading.bounds.isEmpty())
+                g.drawText (heading.text,
+                            heading.bounds.translated (scroller.getX() - scroller.getViewPositionX(),
+                                                       scroller.getY() - scroller.getViewPositionY()),
+                            juce::Justification::bottomLeft, false);
+    }
 }
 
 void ThemePanel::resized()
@@ -399,6 +437,8 @@ void ThemePanel::resized()
     close.setBounds (footer.removeFromRight (86).withSizeKeepingCentre (86, 30));
     footer.removeFromRight (gap);
     resetButton.setBounds (footer.removeFromRight (76).withSizeKeepingCentre (76, 30));
+    footer.removeFromRight (gap - 4);
+    saveButton.setBounds (footer.removeFromRight (70).withSizeKeepingCentre (70, 30));
     footer.removeFromRight (gap - 4);
     exportButton.setBounds (footer.removeFromRight (86).withSizeKeepingCentre (86, 30));
     footer.removeFromRight (gap - 4);

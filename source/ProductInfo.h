@@ -33,6 +33,14 @@ namespace ProductInfo
         required. */
     inline constexpr auto wordmarkAsset = "aura.svg";
 
+    /** Anything this plugin has to credit that the house list does not already cover.
+
+        The About window is the only route to the licence notice inside a host, so a
+        plugin with obligations of its own -- a model taken from a paper, a dataset,
+        artwork under its own terms -- says so here rather than in a fork of the panel.
+        Empty is the normal answer, and appends nothing. */
+    inline constexpr auto extraNotices = "";
+
     inline constexpr auto companyName = "C\xc3\xa9line Audio";
     inline constexpr auto copyrightYear = "2026";
 

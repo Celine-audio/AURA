@@ -1,4 +1,4 @@
-#include "PluginLookAndFeel.h"
+#include "LookAndFeelBase.h"
 
 #include "EmbeddedAssets.h"
 #include "Fonts.h"
@@ -38,7 +38,7 @@ namespace
 }
 
 //==============================================================================
-PluginLookAndFeel::PluginLookAndFeel()
+LookAndFeelBase::LookAndFeelBase()
 {
     if (auto face = Fonts::typeface (Fonts::Weight::Light))
         setDefaultSansSerifTypeface (face);
@@ -46,14 +46,14 @@ PluginLookAndFeel::PluginLookAndFeel()
     applyPalette();
 }
 
-void PluginLookAndFeel::applyPalette()
+void LookAndFeelBase::applyPalette()
 {
     using namespace Theme;
 
     setColour (juce::ResizableWindow::backgroundColourId, chrome());
     setColour (juce::DocumentWindow::textColourId, text());
 
-    setColour (juce::TextButton::buttonColourId, surface());
+    setColour (juce::TextButton::buttonColourId, button());
     setColour (juce::TextButton::buttonOnColourId, surfaceBright());
     setColour (juce::TextButton::textColourOffId, text());
     setColour (juce::TextButton::textColourOnId, text());
@@ -66,18 +66,25 @@ void PluginLookAndFeel::applyPalette()
     setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
     setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
 
-    setColour (juce::TextEditor::backgroundColourId, background());
+    setColour (juce::TextEditor::backgroundColourId, field());
     setColour (juce::TextEditor::textColourId, text());
     setColour (juce::TextEditor::highlightColourId, surfaceBright());
     setColour (juce::TextEditor::highlightedTextColourId, text());
-    setColour (juce::TextEditor::outlineColourId, line());
-    setColour (juce::TextEditor::focusedOutlineColourId, teal());
+    // No rule around a field at rest. It is filled with a colour that already separates
+    // it from what it stands on, like every button and dropdown here -- and a border on
+    // every field is what made these read as system controls dropped into the window.
+    // The focused ring stays: that one is saying something.
+    setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
+    // No rule on a focused field either. The caret is already saying where the typing
+    // goes, and a ring that appears the moment you click is the one that reads as a
+    // system control: it is the only edge in the window that arrives on a click.
+    setColour (juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
     setColour (juce::CaretComponent::caretColourId, text());
 
-    setColour (juce::ComboBox::backgroundColourId, surface());
+    setColour (juce::ComboBox::backgroundColourId, button());
     setColour (juce::ComboBox::textColourId, text());
     setColour (juce::ComboBox::arrowColourId, textDim());
-    setColour (juce::ComboBox::buttonColourId, surface());
+    setColour (juce::ComboBox::buttonColourId, button());
 
     // No rule around a dropdown, closed or focused. It is filled with a colour that
     // already separates it from what it stands on, like every other button here.
@@ -117,15 +124,21 @@ void PluginLookAndFeel::applyPalette()
     setColour (juce::TooltipWindow::textColourId, text());
     setColour (juce::TooltipWindow::outlineColourId, juce::Colours::transparentBlack);
 
+    // JUCE's own Audio/MIDI settings dialog is the only place a ListBox appears -- the
+    // MIDI input picker in a standalone build. Left unset it draws white on white.
+    setColour (juce::ListBox::backgroundColourId, background());
+    setColour (juce::ListBox::outlineColourId, line());
+    setColour (juce::ListBox::textColourId, text());
+
     setColour (juce::AlertWindow::backgroundColourId, chrome());
     setColour (juce::AlertWindow::textColourId, text());
     setColour (juce::AlertWindow::outlineColourId, line());
 }
 
-PluginLookAndFeel::~PluginLookAndFeel() = default;
+LookAndFeelBase::~LookAndFeelBase() = default;
 
 //==============================================================================
-void PluginLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
+void LookAndFeelBase::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
                                          float sliderPosProportional, float rotaryStartAngle,
                                          float rotaryEndAngle, juce::Slider& slider)
 {
@@ -201,7 +214,7 @@ void PluginLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
                                                  juce::PathStrokeType::rounded));
 }
 
-void PluginLookAndFeel::drawSliderGroove (juce::Graphics& g, juce::Rectangle<float> track,
+void LookAndFeelBase::drawSliderGroove (juce::Graphics& g, juce::Rectangle<float> track,
                                           float radius, juce::Slider& slider)
 {
     // The graph's own ground, whichever side of the two-tone split the slider stands
@@ -215,7 +228,7 @@ void PluginLookAndFeel::drawSliderGroove (juce::Graphics& g, juce::Rectangle<flo
     g.drawRoundedRectangle (track, radius, Theme::borderWidth);
 }
 
-void PluginLookAndFeel::drawSliderFill (juce::Graphics& g, juce::Rectangle<float> filled,
+void LookAndFeelBase::drawSliderFill (juce::Graphics& g, juce::Rectangle<float> filled,
                                         float radius, juce::Slider& slider)
 {
     if (filled.getWidth() <= 1.0f || filled.getHeight() <= 1.0f)
@@ -226,7 +239,7 @@ void PluginLookAndFeel::drawSliderFill (juce::Graphics& g, juce::Rectangle<float
     g.fillRoundedRectangle (filled, radius);
 }
 
-void PluginLookAndFeel::drawHorizontalSlider (juce::Graphics& g, juce::Rectangle<float> bounds,
+void LookAndFeelBase::drawHorizontalSlider (juce::Graphics& g, juce::Rectangle<float> bounds,
                                               float sliderPos, juce::Slider& slider)
 {
     constexpr float trackHeight = 6.0f;
@@ -247,7 +260,7 @@ void PluginLookAndFeel::drawHorizontalSlider (juce::Graphics& g, juce::Rectangle
     g.fillRoundedRectangle (thumb, pillRadius (thumb));
 }
 
-void PluginLookAndFeel::drawVerticalSlider (juce::Graphics& g, juce::Rectangle<float> bounds,
+void LookAndFeelBase::drawVerticalSlider (juce::Graphics& g, juce::Rectangle<float> bounds,
                                             float sliderPos, juce::Slider& slider)
 {
     constexpr float trackWidth = 6.0f;
@@ -293,7 +306,7 @@ void PluginLookAndFeel::drawVerticalSlider (juce::Graphics& g, juce::Rectangle<f
     g.fillRoundedRectangle (thumb, pillRadius (thumb));
 }
 
-void PluginLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height,
+void LookAndFeelBase::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height,
                                           float sliderPos, float minSliderPos, float maxSliderPos,
                                           juce::Slider::SliderStyle style, juce::Slider& slider)
 {
@@ -309,7 +322,7 @@ void PluginLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int w
 }
 
 //==============================================================================
-void PluginLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& button,
+void LookAndFeelBase::drawToggleButton (juce::Graphics& g, juce::ToggleButton& button,
                                          bool shouldDrawButtonAsHighlighted,
                                          bool shouldDrawButtonAsDown)
 {
@@ -363,7 +376,7 @@ void PluginLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton&
     }
 }
 
-void PluginLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
+void LookAndFeelBase::drawButtonBackground (juce::Graphics& g, juce::Button& button,
                                              const juce::Colour& backgroundColour,
                                              bool shouldDrawButtonAsHighlighted,
                                              bool shouldDrawButtonAsDown)
@@ -379,16 +392,15 @@ void PluginLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
         fill = fill.withMultipliedAlpha (0.5f);
 
     // Fill only. Every button this draws is filled with a colour that already
-    // separates it from what it stands on — the actions in their red, Export in the
-    // correction's purple — so a rule around it drew a second edge where one was
-    // doing the job. Note that this reaches the editor's buttons only: the About
-    // dialog is a desktop window and inherits no look and feel from it, and the
-    // toolbar's icons are IconButtons, which paint themselves.
+    // separates it from what it stands on, so a rule around it drew a second edge
+    // where one was doing the job. Note that this reaches the editor's buttons only:
+    // a dialog is a desktop window and inherits no look and feel from the editor, and
+    // the toolbar's icons are IconButtons, which paint themselves.
     g.setColour (fill);
     g.fillRoundedRectangle (bounds, Theme::cornerRadius);
 }
 
-void PluginLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button, bool, bool)
+void LookAndFeelBase::drawButtonText (juce::Graphics& g, juce::TextButton& button, bool, bool)
 {
     const auto font = getTextButtonFont (button, button.getHeight());
     g.setFont (font);
@@ -405,7 +417,7 @@ void PluginLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
 }
 
 //==============================================================================
-void PluginLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, bool isButtonDown,
+void LookAndFeelBase::drawComboBox (juce::Graphics& g, int width, int height, bool isButtonDown,
                                      int, int, int, int, juce::ComboBox& box)
 {
     const auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height)
@@ -444,14 +456,14 @@ void PluginLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, 
 }
 
 //==============================================================================
-void PluginLookAndFeel::fillTextEditorBackground (juce::Graphics& g, int width, int height,
+void LookAndFeelBase::fillTextEditorBackground (juce::Graphics& g, int width, int height,
                                                   juce::TextEditor& editor)
 {
     g.setColour (editor.findColour (juce::TextEditor::backgroundColourId));
     g.fillRoundedRectangle (0.0f, 0.0f, (float) width, (float) height, Theme::cornerRadius);
 }
 
-void PluginLookAndFeel::drawTextEditorOutline (juce::Graphics& g, int width, int height,
+void LookAndFeelBase::drawTextEditorOutline (juce::Graphics& g, int width, int height,
                                                juce::TextEditor& editor)
 {
     if (! editor.isEnabled())
@@ -473,7 +485,7 @@ void PluginLookAndFeel::drawTextEditorOutline (juce::Graphics& g, int width, int
 }
 
 //==============================================================================
-void PluginLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
+void LookAndFeelBase::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
 {
     const auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height);
 
@@ -481,7 +493,7 @@ void PluginLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, i
     g.fillRoundedRectangle (bounds, Theme::cornerRadius);
 }
 
-void PluginLookAndFeel::drawPopupMenuBackgroundWithOptions (juce::Graphics& g, int width, int height,
+void LookAndFeelBase::drawPopupMenuBackgroundWithOptions (juce::Graphics& g, int width, int height,
                                                             const juce::PopupMenu::Options& options)
 {
     juce::ignoreUnused (options);
@@ -489,7 +501,7 @@ void PluginLookAndFeel::drawPopupMenuBackgroundWithOptions (juce::Graphics& g, i
     drawPopupMenuBackground (g, width, height);
 }
 
-int PluginLookAndFeel::getPopupMenuBorderSizeWithOptions (const juce::PopupMenu::Options& options)
+int LookAndFeelBase::getPopupMenuBorderSizeWithOptions (const juce::PopupMenu::Options& options)
 {
     juce::ignoreUnused (options);
 
@@ -504,7 +516,7 @@ int PluginLookAndFeel::getPopupMenuBorderSizeWithOptions (const juce::PopupMenu:
     return 5;
 }
 
-void PluginLookAndFeel::getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator,
+void LookAndFeelBase::getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator,
                                                    int standardMenuItemHeight,
                                                    int& idealWidth, int& idealHeight)
 {
@@ -524,7 +536,7 @@ void PluginLookAndFeel::getIdealPopupMenuItemSize (const juce::String& text, boo
     idealWidth = juce::GlyphArrangement::getStringWidthInt (font, text) + 34;
 }
 
-void PluginLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<int>& area,
+void LookAndFeelBase::drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<int>& area,
                                            bool isSeparator, bool isActive, bool isHighlighted,
                                            bool isTicked, bool hasSubMenu,
                                            const juce::String& text,
@@ -586,7 +598,7 @@ void PluginLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectan
     }
 }
 
-juce::PopupMenu::Options PluginLookAndFeel::getOptionsForComboBoxPopupMenu (juce::ComboBox& box,
+juce::PopupMenu::Options LookAndFeelBase::getOptionsForComboBoxPopupMenu (juce::ComboBox& box,
                                                                             juce::Label& label)
 {
     return juce::PopupMenu::Options()
@@ -623,7 +635,7 @@ namespace
     constexpr float tooltipMaximumWidth = 320.0f;
 }
 
-void PluginLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text,
+void LookAndFeelBase::drawTooltip (juce::Graphics& g, const juce::String& text,
                                      int width, int height)
 {
     const auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height);
@@ -637,7 +649,7 @@ void PluginLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text
         .draw (g, bounds.reduced (tooltipPaddingX, tooltipPaddingY));
 }
 
-juce::Rectangle<int> PluginLookAndFeel::getTooltipBounds (const juce::String& tipText,
+juce::Rectangle<int> LookAndFeelBase::getTooltipBounds (const juce::String& tipText,
                                                           juce::Point<int> screenPosition,
                                                           juce::Rectangle<int> parentArea)
 {
@@ -658,7 +670,7 @@ juce::Rectangle<int> PluginLookAndFeel::getTooltipBounds (const juce::String& ti
 }
 
 //==============================================================================
-void PluginLookAndFeel::drawCallOutBoxBackground (juce::CallOutBox& box, juce::Graphics& g,
+void LookAndFeelBase::drawCallOutBoxBackground (juce::CallOutBox& box, juce::Graphics& g,
                                                 const juce::Path& path, juce::Image& cachedImage)
 {
     // The shadow is cached because it is a blur over the whole bubble and the bubble
@@ -686,7 +698,7 @@ void PluginLookAndFeel::drawCallOutBoxBackground (juce::CallOutBox& box, juce::G
     g.strokePath (path, juce::PathStrokeType (Theme::borderWidth));
 }
 
-void PluginLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
+void LookAndFeelBase::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
 {
     // The text is centred in the run from the left edge to where the chevron starts,
     // not in the box. Mirroring the chevron's inset on the left instead centres it in
@@ -702,7 +714,7 @@ void PluginLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& 
 }
 
 //==============================================================================
-juce::Font PluginLookAndFeel::getTextButtonFont (juce::TextButton& button, int buttonHeight)
+juce::Font LookAndFeelBase::getTextButtonFont (juce::TextButton& button, int buttonHeight)
 {
     if (button.getProperties().contains (largeGlyphProperty))
         return Fonts::light ((float) buttonHeight * 0.78f);
@@ -710,14 +722,14 @@ juce::Font PluginLookAndFeel::getTextButtonFont (juce::TextButton& button, int b
     return Fonts::light (juce::jmin (16.0f, (float) buttonHeight * 0.5f));
 }
 
-juce::Font PluginLookAndFeel::getComboBoxFont (juce::ComboBox& box)
+juce::Font LookAndFeelBase::getComboBoxFont (juce::ComboBox& box)
 {
     return Fonts::light (juce::jmin (15.0f, (float) box.getHeight() * 0.55f));
 }
 
-juce::Font PluginLookAndFeel::getPopupMenuFont() { return Fonts::light (15.0f); }
+juce::Font LookAndFeelBase::getPopupMenuFont() { return Fonts::light (15.0f); }
 
-void PluginLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g,
+void LookAndFeelBase::drawPopupMenuSectionHeader (juce::Graphics& g,
                                                    const juce::Rectangle<int>& area,
                                                    const juce::String& sectionName)
 {
@@ -731,7 +743,7 @@ void PluginLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g,
     g.drawFittedText (sectionName, r, juce::Justification::centredLeft, 1);
 }
 
-juce::Font PluginLookAndFeel::getLabelFont (juce::Label& label)
+juce::Font LookAndFeelBase::getLabelFont (juce::Label& label)
 {
     // A label that has asked for a particular face keeps it.
     if (label.getProperties().contains (keepFontProperty))
@@ -744,10 +756,10 @@ juce::Font PluginLookAndFeel::getLabelFont (juce::Label& label)
     return Fonts::light (label.getFont().getHeight());
 }
 
-juce::Font PluginLookAndFeel::getAlertWindowTitleFont() { return Fonts::bold (17.0f); }
-juce::Font PluginLookAndFeel::getAlertWindowMessageFont() { return Fonts::light (15.0f); }
+juce::Font LookAndFeelBase::getAlertWindowTitleFont() { return Fonts::bold (17.0f); }
+juce::Font LookAndFeelBase::getAlertWindowMessageFont() { return Fonts::light (15.0f); }
 
-juce::Label* PluginLookAndFeel::createSliderTextBox (juce::Slider& slider)
+juce::Label* LookAndFeelBase::createSliderTextBox (juce::Slider& slider)
 {
     auto* label = LookAndFeel_V4::createSliderTextBox (slider);
 

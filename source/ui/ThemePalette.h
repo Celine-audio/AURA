@@ -51,6 +51,7 @@ namespace Celine::Theme
     {
     public:
         Palette();
+        ~Palette() override;
 
         juce::Colour get (Role role) const noexcept { return colours[(size_t) role]; }
 
@@ -86,19 +87,72 @@ namespace Celine::Theme
         juce::Result loadFrom (const juce::File&);
         juce::Result saveTo (const juce::File&) const;
 
-        /** Where the theme in force is kept between sessions: one file under the
-            company folder, shared by every Céline plugin. Theming one of them themes
-            all of them, which is the point of a house look. */
+        /** Where this plugin's theme is kept between sessions: one file per plugin,
+            under the company folder, so every instance of it on the machine wears the
+            same colours whatever host or format it is loaded as.
+
+            Per plugin rather than one file for the house, because a cab loader and a
+            circuit designer are not obliged to look the same -- and a theme exported
+            from either still loads into the other, since a key a build does not know is
+            ignored and one it knows but the file omits keeps its shipped value. */
         static juce::File storedFile();
+
+        /** Points `storedFile()` somewhere disposable. A test writes themes; without
+            this it would write over whatever colours the person running it had chosen
+            for themselves. Same hook, and the same reason, as PresetLibrary's. */
+        static void useFileForTesting (const juce::File&);
 
         /** Reads `storedFile()` if it is there. Anything wrong with it is not worth
             interrupting a session for -- the plugin opens on the shipped colours. */
         void restore();
-        void store() const;
+
+        /** Writes the theme to `storedFile()`. Explicit: editing a colour changes what
+            is on screen and nothing else, so the only thing that ever touches the disk
+            is somebody pressing Save. */
+        void store();
+
+        /** Colours have moved since the last save. What the editor's status line reads,
+            and the whole of why Save exists. */
+        bool hasUnsavedChanges() const noexcept { return dirty; }
+
+        /** Picks up a theme another instance has saved.
+
+            Each plugin format is its own loaded module with its own copy of everything
+            static, so the VST3 and the AU in one session are two palettes that never
+            meet -- which is why theming the VST3 left the AU beside it unchanged until
+            it was reloaded.
+
+            Called at the two moments it can matter -- a window opening, and the theme
+            editor opening -- rather than on a timer. Nothing here runs in the
+            background: the disk is touched when somebody does something, and not
+            otherwise. Unsaved changes are left alone, so this cannot take away colours
+            you are in the middle of choosing. */
+        void refreshFromDisk();
 
     private:
+        /** Tells the interface, and marks the theme as needing a save.
+
+            Every path that changes a colour comes through here, which is what keeps the
+            unsaved flag honest however the colour was picked. It writes nothing: a
+            colour picker sends a change per mouse move, and a file per mouse move is not
+            a thing worth doing for a preference. */
+        void changed();
+
+        /** Reading the stored theme is not a change worth writing back. */
+        bool restoring = false;
+
+        /** Colours have moved since the last save, or since they were read. */
+        bool dirty = false;
+
+        /** The file's timestamp as this palette last left it. Anything newer was
+            written by another instance, and is worth reading; recording it after our
+            own writes is what stops us reloading what we just saved. */
+        juce::Time lastSeenOnDisk;
+
+
         std::array<juce::Colour, numRoles> colours;
         juce::String name;
+
     };
 
     //==========================================================================

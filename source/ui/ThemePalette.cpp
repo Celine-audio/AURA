@@ -58,6 +58,13 @@ namespace Celine::Theme
     //==========================================================================
     Palette::Palette()
     {
+        // Neither of these is a change anybody made: the first is what the design ships
+        // and the second is what is already on disk. Guarded so building a palette does
+        // not schedule a write of the file it has just read -- and so it does not reach
+        // for a Timer, which matters because reading any colour builds this, and the
+        // first read can come from a static initialiser, before there is a message loop.
+        const juce::ScopedValueSetter<bool> guard (restoring, true);
+
         reset();
         restore();
     }
@@ -72,26 +79,26 @@ namespace Celine::Theme
             return;
 
         held = colour;
-        sendChangeMessage();
+        changed();
     }
 
     void Palette::reset()
     {
-        auto changed = false;
+        auto moved = false;
 
         for (size_t i = 0; i < numRoles; ++i)
         {
             const juce::Colour shipped { info()[i].shipped };
 
-            changed |= colours[i] != shipped;
+            moved |= colours[i] != shipped;
             colours[i] = shipped;
         }
 
-        changed |= name.isNotEmpty();
+        moved |= name.isNotEmpty();
         name = {};
 
-        if (changed)
-            sendChangeMessage();
+        if (moved)
+            changed();
     }
 
     bool Palette::isShipped() const noexcept
@@ -111,7 +118,7 @@ namespace Celine::Theme
             return;
 
         name = std::move (newName);
-        sendChangeMessage();
+        changed();
     }
 
     //==========================================================================
@@ -159,7 +166,7 @@ namespace Celine::Theme
 
         name = root->getProperty (nameKey).toString().trim();
 
-        sendChangeMessage();
+        changed();
         return juce::Result::ok();
     }
 
@@ -192,10 +199,22 @@ namespace Celine::Theme
     }
 
     //==========================================================================
+    namespace
+    {
+        juce::File& storedFileOverride()
+        {
+            static juce::File file;
+            return file;
+        }
+    }
+
     juce::File Palette::storedFile()
     {
+        if (const auto& override_ = storedFileOverride(); override_ != juce::File{})
+            return override_;
+
         juce::PropertiesFile::Options options;
-        options.applicationName = "theme";
+        options.applicationName = PRODUCT_NAME_WITHOUT_VERSION;
         options.filenameSuffix = fileExtension;
         options.folderName = juce::String (juce::CharPointer_UTF8 (ProductInfo::companyName));
         options.osxLibrarySubFolder = "Application Support";
@@ -203,19 +222,102 @@ namespace Celine::Theme
         return options.getDefaultFile();
     }
 
-    void Palette::restore()
+    namespace
     {
-        const auto stored = storedFile();
+        /** Where the theme lived when every Céline plugin shared one. Read once, if this
+            plugin has no file of its own yet, so splitting them up does not throw away
+            the colours somebody had already chosen. */
+        juce::File legacySharedFile()
+        {
+            juce::PropertiesFile::Options options;
+            options.applicationName = "theme";
+            options.filenameSuffix = Palette::fileExtension;
+            options.folderName = juce::String (juce::CharPointer_UTF8 (ProductInfo::companyName));
+            options.osxLibrarySubFolder = "Application Support";
 
-        if (stored.existsAsFile())
-            loadFrom (stored);
+            return options.getDefaultFile();
+        }
     }
 
-    void Palette::store() const
+    void Palette::useFileForTesting (const juce::File& file)
+    {
+        storedFileOverride() = file;
+    }
+
+    Palette::~Palette() = default;
+
+    void Palette::changed()
+    {
+        sendChangeMessage();
+
+        if (! restoring)
+            dirty = true;
+    }
+
+    void Palette::restore()
+    {
+        auto stored = storedFile();
+
+        if (! stored.existsAsFile())
+        {
+            // Nothing of this plugin's own yet. Inherit what the house shared before the
+            // themes were split up, if there is any.
+            //
+            // Only when reading the real location: a test points storedFile() somewhere
+            // disposable precisely so it does not touch what the person at this machine
+            // has, and falling back to the shared file would walk straight around that.
+            if (storedFileOverride() != juce::File{})
+                return;
+
+            const auto legacy = legacySharedFile();
+
+            if (! legacy.existsAsFile() || legacy == stored)
+                return;
+
+            stored = legacy;
+        }
+
+        const juce::ScopedValueSetter<bool> guard (restoring, true);
+        loadFrom (stored);
+
+        lastSeenOnDisk = storedFile().getLastModificationTime();
+        dirty = false;
+    }
+
+    void Palette::refreshFromDisk()
+    {
+        // Colours somebody is in the middle of choosing are not overwritten by what
+        // another instance happened to save.
+        if (dirty)
+            return;
+
+        const auto stored = storedFile();
+        const auto stamp = stored.getLastModificationTime();
+
+        if (stamp == lastSeenOnDisk)
+            return;
+
+        lastSeenOnDisk = stamp;
+
+        if (! stored.existsAsFile())
+            return;
+
+        // Guarded, so reading somebody else's theme tells this window to repaint without
+        // scheduling a write back of what was just read.
+        const juce::ScopedValueSetter<bool> guard (restoring, true);
+        loadFrom (stored);
+    }
+
+    void Palette::store()
     {
         // Best effort. A theme that cannot be written is worth neither an alert in the
         // middle of a session nor losing the colours already on screen over.
         saveTo (storedFile());
+
+        // Remembered so refreshFromDisk does not read our own write back as somebody
+        // else's change.
+        lastSeenOnDisk = storedFile().getLastModificationTime();
+        dirty = false;
     }
 
     //==========================================================================

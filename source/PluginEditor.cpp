@@ -104,16 +104,6 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     exportButton.onClick = [this] { showExportPanel(); };
     addAndMakeVisible (exportButton);
 
-    logo = Celine::Assets::drawable ("logo.svg");
-    wordmark = Celine::Assets::drawable (ProductInfo::wordmarkAsset,
-                                        Celine::Assets::IfMissing::returnNull);
-
-    if (logo != nullptr)
-        Celine::Assets::tint (*logo, Theme::text());
-
-    if (wordmark != nullptr)
-        Celine::Assets::tint (*wordmark, Theme::text());
-
     settingsButton.onClick = [this] { showSettingsMenu(); };
     addAndMakeVisible (settingsButton);
 
@@ -135,9 +125,11 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     // Running is the ordinary state, so the button looks like its neighbours;
     // bypassed is the state worth noticing, so that is the one that goes red.
     bypassButton.setClickingTogglesState (true);
-    bypassButton.setActiveColour (Theme::danger());
+
     bypassButton.onStateChange = [this] { refreshBypassLook(); };
     addAndMakeVisible (bypassButton);
+
+    applyColours();
 
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         processorRef.getAPVTS(), ParamID::bypass, bypassButton);
@@ -173,6 +165,11 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     // The theme is process-wide, so a colour changed in one window has to reach every
     // other -- including this one, when the change was made somewhere else.
     Theme::palette().addChangeListener (this);
+
+    // Once, here, rather than on a timer: another instance may have saved a theme since
+    // this module last looked, and a window opening is the moment that can matter. The
+    // disk is not touched again unless somebody asks it to be.
+    Theme::palette().refreshFromDisk();
 
     // Restore whatever size the user last left the window at.
     //
@@ -396,11 +393,36 @@ void PluginEditor::beginBandGesture (SpectrumDisplay::BandEdge edge, bool starti
         starting ? parameter->beginChangeGesture() : parameter->endChangeGesture();
 }
 
+void PluginEditor::applyColours()
+{
+    // Explicitly chosen, so explicitly handed back: an override set once is a snapshot
+    // like any other, and this one is the whole of what "bypassed" looks like.
+    bypassButton.setActiveColour (Theme::danger());
+
+    // Re-read from the binary and tinted here rather than in the constructor. Tinting
+    // writes the colour into the drawable, so a second pass would be colouring the
+    // result of the first rather than the artwork -- which is how a mark ends up stuck
+    // on whatever colour the theme happened to be when the window opened.
+    logo = Celine::Assets::drawable ("logo.svg");
+
+    if (logo != nullptr)
+        Celine::Assets::tint (*logo, Theme::text());
+
+    wordmark = Celine::Assets::drawable (ProductInfo::wordmarkAsset, Celine::Assets::IfMissing::returnNull);
+
+    if (wordmark != nullptr)
+        Celine::Assets::tint (*wordmark, Theme::text());
+}
+
 void PluginEditor::changeListenerCallback (juce::ChangeBroadcaster*)
 {
+    // First, because applyColours below reads colours back out of it.
+    //
     // Everything JUCE draws for us is *told* its colours, so the look and feel has to
     // re-read them before anything repaints -- see PluginLookAndFeel::applyPalette.
     lookAndFeel.applyPalette();
+
+    applyColours();
 
     // And every child that took a colour once and kept it gets a chance to take it
     // again. JUCE walks the tree for us; a control that snapshots colours says so by

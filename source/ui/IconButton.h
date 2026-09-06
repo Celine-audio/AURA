@@ -51,6 +51,17 @@ namespace Celine
 
         /** The fill an active button wears. Bypass wants to shout in red where
             everything else wears the accent. */
+        /** Whether this draws a background of its own.
+
+            Off for a button that sits inside something already drawn as its frame --
+            Céline's undo and redo share one housing painted behind the pair. Such a
+            button shows only its hover, inset so it stays within that housing. */
+        void setDrawsFrame (bool shouldDraw)
+        {
+            drawsFrame = shouldDraw;
+            repaint();
+        }
+
         void setActiveColour (juce::Colour colour)
         {
             activeColour = colour;
@@ -76,13 +87,20 @@ namespace Celine
 
             if (active)
             {
-                g.setColour (activeColour);
+                g.setColour (activeColour.value_or (Theme::toolActive()));
                 g.fillRoundedRectangle (bounds, Theme::cornerRadius);
             }
-            else
+            else if (drawsFrame)
             {
-                g.setColour (down || highlighted ? Theme::surfaceBright() : Theme::surface());
+                g.setColour (down || highlighted ? Theme::surfaceBright() : Theme::button());
                 g.fillRoundedRectangle (bounds, Theme::cornerRadius);
+            }
+            else if (down || highlighted)
+            {
+                // Frameless, so only the hover shows -- and it stays inside whatever is
+                // drawn behind it as its frame.
+                g.setColour (Theme::surfaceBright());
+                g.fillRoundedRectangle (bounds.reduced (1.0f), Theme::cornerRadius * 0.6f);
             }
 
             // Fill only, no rule. Every button here is filled with something that
@@ -111,9 +129,10 @@ namespace Celine
 
     private:
         std::unique_ptr<juce::Drawable> icon;
-        juce::Colour activeColour { Theme::toolActive() };
+        std::optional<juce::Colour> activeColour;
         std::optional<juce::Colour> iconColour;
         bool active = false;
+        bool drawsFrame = true;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IconButton)
     };

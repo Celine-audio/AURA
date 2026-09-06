@@ -116,7 +116,10 @@ namespace
                    "  Catch2 3.8.1 ................. Boost Software Licence 1.0\n"
                    "  CPM.cmake .................... MIT\n"
                    "\n")
-            << "The repository's LICENSE and THIRD-PARTY-NOTICES files carry the full account, including the verbatim licence of every bundled work.\n";
+            << "The repository's LICENSE and THIRD-PARTY-NOTICES files carry the full account, including the verbatim licence of every bundled work.\n"
+
+            // Whatever this plugin owes on its own account. Empty for most of them.
+            << juce::String::fromUTF8 (ProductInfo::extraNotices);
 
         return text;
     }
@@ -141,13 +144,6 @@ AboutPanel::AboutPanel()
     // 300px across, so the comparison to make is the lockup's, not the house mark's
     // alone. If that ever needs more headroom, grow this pair rather than shrinking
     // the marks, which is why the two sizes were raised together.
-    logo = Celine::Assets::drawable ("logo.svg");
-    wordmark = Celine::Assets::drawable (ProductInfo::wordmarkAsset, Assets::IfMissing::returnNull);
-
-    for (auto* art : { &logo, &wordmark })
-        if (*art != nullptr)
-            Celine::Assets::tint (**art, Theme::text());
-
     // Until a plugin has a wordmark drawn for it, its name is set in the display
     // face instead, so the window looks finished from the first build.
     wordmarkText.setText (juce::String (JucePlugin_Name).toLowerCase(), juce::dontSendNotification);
@@ -205,6 +201,7 @@ AboutPanel::AboutPanel()
     // window's own button, not a piece of chrome.
     addAndMakeVisible (close);
 
+    Theme::palette().addChangeListener (this);
     applyColours();
 
     // Last, and it matters. setSize fires resized(), which measures each mark to
@@ -216,6 +213,18 @@ AboutPanel::AboutPanel()
 
 void AboutPanel::applyColours()
 {
+    // Re-read from the binary each time. Assets::tint writes the colour into the
+    // drawable, so a second pass would be colouring the result of the first rather than
+    // the artwork.
+    logo = Celine::Assets::drawable ("logo.svg");
+    wordmark = Celine::Assets::drawable (ProductInfo::wordmarkAsset, Assets::IfMissing::returnNull);
+
+    for (auto* art : { &logo, &wordmark })
+        if (*art != nullptr)
+            Celine::Assets::tint (**art, Theme::text());
+
+    wordmarkText.setVisible (wordmark == nullptr);
+
     wordmarkText.setColour (juce::Label::textColourId, Theme::text());
     subtitle.setColour (juce::Label::textColourId, Theme::comment());
     version.setColour (juce::Label::textColourId, Theme::comment());
@@ -234,6 +243,8 @@ void AboutPanel::applyColours()
 
 AboutPanel::~AboutPanel()
 {
+    Theme::palette().removeChangeListener (this);
+
     setLookAndFeel (nullptr);
 }
 
@@ -392,4 +403,12 @@ void showAboutWindow (juce::Component* associatedComponent)
         if (dialog != nullptr)
             dialog->exitModalState (0);
     };
+}
+
+void AboutPanel::changeListenerCallback (juce::ChangeBroadcaster*)
+{
+    lookAndFeel.applyPalette();
+    applyColours();
+    sendLookAndFeelChange();
+    repaint();
 }

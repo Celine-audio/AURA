@@ -80,7 +80,9 @@ namespace Celine
 
         void importTheme();
         void exportTheme();
-        void resetTheme();
+    /** Writes the colours to this plugin's theme file. Nothing else does. */
+    void saveTheme();
+    void resetTheme();
 
         void refreshRows();
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
@@ -104,6 +106,7 @@ namespace Celine
 
         juce::TextButton importButton { juce::String::fromUTF8 ("Import\xe2\x80\xa6") };
         juce::TextButton exportButton { juce::String::fromUTF8 ("Export\xe2\x80\xa6") };
+        juce::TextButton saveButton { "Save" };
         juce::TextButton resetButton { "Reset" };
 
         juce::Label status;

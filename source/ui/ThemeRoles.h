@@ -27,6 +27,8 @@
     X (panel,             "Panel",               "Surfaces", 0xfff9fbff)                \
     X (surface,           "Control",             "Surfaces", 0xff37364a)                \
     X (surfaceBright,     "Control, hovered",    "Surfaces", 0xff4f485d)                \
+    X (button,            "Button",              "Surfaces", 0xff37364a)                \
+    X (field,             "Text field",          "Surfaces", 0xff28262e)                \
     X (line,              "Border",              "Surfaces", 0xffd9d9d9)                \
     X (consoleBackground, "Graph ground",        "Surfaces", 0xff17151a)                \
     X (pill,              "List row",            "Surfaces", 0xffdcdee4)                \
