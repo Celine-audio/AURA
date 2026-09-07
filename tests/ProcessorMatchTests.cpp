@@ -596,3 +596,147 @@ TEST_CASE ("The plugin does not fade in when the host prepares it", "[processor]
         REQUIRE_THAT (buffer.getSample (0, i),
                       Catch::Matchers::WithinAbs (original.getSample (0, i), 1.0e-5f));
 }
+
+TEST_CASE ("Starting a Learn does not flash the previous take", "[processor]")
+{
+    // The learned curve falls back to the snapshot a committed match was taken from,
+    // which is all a reloaded session has. That fallback must not apply while a Learn
+    // is running: the analyzer is wiped when the take starts, and until the first frame
+    // arrives the fallback put the old curve on screen for a moment before the live one
+    // replaced it.
+    PluginProcessor plugin;
+    captureAsymmetricMatch (plugin);
+
+    std::vector<float> curve;
+    REQUIRE (plugin.getLearnedSourceMagnitudes (curve)); // the snapshot, nothing capturing
+
+    // Start a fresh Learn and ask before any audio has arrived. This is the frame the
+    // bug showed on.
+    plugin.setSourceCapturing (true);
+
+    CHECK_FALSE (plugin.getLearnedSourceMagnitudes (curve));
+
+    // The side that is not being learned still falls back, which is the case the
+    // fallback exists for.
+    CHECK (plugin.getLearnedReferenceMagnitudes (curve));
+
+    // And once frames arrive it reports the take being learned.
+    pushNoise (plugin, 10, 0.0f, 11);
+    CHECK (plugin.getLearnedSourceMagnitudes (curve));
+}
+
+TEST_CASE ("A match goes stale when the captures move on from it", "[processor]")
+{
+    PluginProcessor plugin;
+
+    // Nothing to be stale before anything has been matched.
+    CHECK_FALSE (plugin.isMatchStale());
+
+    captureAsymmetricMatch (plugin);
+
+    // Freshly matched, and neither capture is running: the filter in force is exactly
+    // what has been learned.
+    REQUIRE (plugin.isMatched());
+    CHECK_FALSE (plugin.isMatchStale());
+
+    SECTION ("starting a Learn stales it immediately")
+    {
+        // Before any audio arrives, because starting a Learn wipes the analyzer -- and
+        // that alone means the match no longer describes what is being learned.
+        plugin.setSourceCapturing (true);
+        CHECK (plugin.isMatchStale());
+
+        // And matching again settles it, once there is something to match.
+        pushNoise (plugin, 60, 0.4f, 21);
+        plugin.setSourceCapturing (false);
+
+        REQUIRE (plugin.performMatch());
+        CHECK_FALSE (plugin.isMatchStale());
+    }
+
+    SECTION ("so does audio arriving into a capture left running")
+    {
+        plugin.setReferenceCapturing (true);
+        pushNoise (plugin, 20, 0.0f, 22);
+
+        CHECK (plugin.isMatchStale());
+    }
+
+    SECTION ("a re-learn of exactly the same length is still stale")
+    {
+        // The trap a frame count alone falls into. captureAsymmetricMatch learns 80
+        // blocks a side; learn 80 again and the count comes back to the number the
+        // match was taken at, so nothing about the length says this is a different
+        // recording -- and it is a different recording. The take is numbered for this.
+        const auto framesAtMatch = plugin.getSourceFrameCount();
+
+        plugin.setSourceCapturing (true);
+        pushNoise (plugin, 80, 0.3f, 23);
+        plugin.setSourceCapturing (false);
+
+        REQUIRE (plugin.getSourceFrameCount() == framesAtMatch); // the trap is armed
+        CHECK (plugin.isMatchStale());
+    }
+
+    SECTION ("a reloaded session is not stale")
+    {
+        // Its captures are exactly the ones the stored match was built from, and the
+        // analyzers are empty because nothing has been learned this run. Reporting that
+        // as stale would put the interface in the orange state on every session open.
+        juce::MemoryBlock state;
+        plugin.getStateInformation (state);
+
+        PluginProcessor reloaded;
+        reloaded.prepareToPlay (sampleRate, blockSize);
+        reloaded.setStateInformation (state.getData(), (int) state.getSize());
+
+        REQUIRE (reloaded.isMatched());
+        CHECK_FALSE (reloaded.isMatchStale());
+    }
+}
+
+TEST_CASE ("Match stays offered while a side is re-learned", "[processor]")
+{
+    // Arming a Learn wipes that analyzer, so for as long as it takes the first frame to
+    // arrive -- indefinitely, with the transport stopped -- the side holds nothing. The
+    // Match button read that as "cannot match" and went half-lit the moment you pressed
+    // Learn, coming up again when audio arrived. A side that has been learned before is
+    // not empty: it holds what it committed last time until the new take replaces it.
+    PluginProcessor plugin;
+
+    // Before anything has been learned, there is genuinely nothing to match.
+    CHECK_FALSE (plugin.canMatch());
+
+    plugin.prepareToPlay (sampleRate, blockSize);
+    plugin.setReferenceCapturing (true);
+    pushNoise (plugin, 80, 0.0f, 31);
+    plugin.setReferenceCapturing (false);
+
+    // One side learned is still not enough, and the button stays off — this is the
+    // first-time path, and it is unchanged.
+    CHECK_FALSE (plugin.canMatch());
+
+    plugin.setSourceCapturing (true);
+    pushNoise (plugin, 80, 0.9f, 32);
+    plugin.setSourceCapturing (false);
+
+    CHECK (plugin.canMatch());
+    REQUIRE (plugin.performMatch());
+
+    // Now re-learn the source. Before any audio arrives its analyzer is empty.
+    plugin.setSourceCapturing (true);
+    REQUIRE (plugin.getSourceFrameCount() == 0);
+
+    // The button stays offered, and stays offered for the whole take.
+    CHECK (plugin.canMatch());
+    CHECK (plugin.isMatchStale());
+
+    pushNoise (plugin, 10, 0.2f, 33);
+    CHECK (plugin.canMatch());
+
+    // And pressing it in that window does something rather than nothing: the side with
+    // no new frames yet is matched from what it committed last time.
+    plugin.setSourceCapturing (false);
+    CHECK (plugin.performMatch());
+    CHECK_FALSE (plugin.isMatchStale());
+}

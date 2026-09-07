@@ -62,10 +62,17 @@ private:
 
     // The house mark, top right, tinted to the text colour. Celine draws it the
     // same way and off the same file.
-    // Fade state for the two moving traces: the last frame count seen from each
-    // analyzer, and how far its trace has decayed since that stopped changing.
-    std::int64_t lastCurrentFrames = -1, lastReferenceFrames = -1;
-    float currentFade = 1.0f, referenceFade = 1.0f;
+    // Fade state for one of the two moving traces: the last frame count seen from its
+    // analyzer, how many ticks have passed without that changing, and how far the trace
+    // has decayed once the wait ran out.
+    struct TraceFade
+    {
+        std::int64_t lastFrames = -1;
+        int ticksWithoutFrame = 0;
+        float level = 1.0f;
+    };
+
+    TraceFade currentFade, referenceFade;
 
     std::unique_ptr<juce::Drawable> logo;
     std::unique_ptr<juce::Drawable> wordmark;
@@ -130,7 +137,16 @@ private:
 
     // The correction is only re-derived a few times a second while a capture is
     // accumulating; the live traces still move at the full frame rate.
-    int curveTick = 0;
+    /** Where both captures stood on the previous tick. The preview curve is re-derived
+        when this changes, which is exactly when there is something new to draw. */
+    struct CaptureProgress
+    {
+        std::int64_t source = -1, reference = -1;
+
+        bool operator== (const CaptureProgress&) const = default;
+    };
+
+    CaptureProgress captureProgress;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginEditor)
 };

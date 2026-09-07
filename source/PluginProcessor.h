@@ -75,6 +75,13 @@ public:
     /** True once a match curve has been computed and loaded. */
     bool isMatched() const noexcept { return engine.isMatched(); }
 
+    /** True when what has been learned has moved on from the match in force, which is
+        the cue for the interface to ask for another one. */
+    bool isMatchStale() const noexcept { return engine.isMatchStale(); }
+
+    /** Whether pressing Match would do anything. */
+    bool canMatch() const { return engine.canMatch(); }
+
     /** Builds the correction curve from the two captures and loads it into the
         convolution engine. Returns false if either capture is empty. */
     bool performMatch() { return engine.performMatch(); }

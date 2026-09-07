@@ -43,7 +43,7 @@ ThemePanel::Row::Row (Theme::Role roleToEdit, ThemePanel& panel)
     hex.setJustification (juce::Justification::centred);
     hex.setBorder (juce::BorderSize<int> (0));
     hex.setIndents (0, 0);
-    hex.setTooltip ("The colour as a hex value. Paste one in, or read one off.");
+    hex.setTooltip ("The colour as a hex value.");
     hex.onReturnKey = [this] { applyTypedText(); };
     hex.onFocusLost = [this] { applyTypedText(); };
     addAndMakeVisible (hex);
@@ -133,8 +133,7 @@ ThemePanel::ThemePanel()
     addAndMakeVisible (title);
 
     subtitle.setText (juce::String::fromUTF8 (
-                          "Every colour this plugin draws with. Changes show at once; "
-                          "Save keeps them."),
+                          "Customise, save, import and share themes."),
                       juce::dontSendNotification);
     subtitle.setFont (Fonts::light (11.5f));
     subtitle.setJustificationType (juce::Justification::topLeft);

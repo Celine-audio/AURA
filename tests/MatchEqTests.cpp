@@ -341,3 +341,48 @@ TEST_CASE ("averageDb averages element-wise", "[designer]")
     CHECK_THAT (average[1], Catch::Matchers::WithinAbs (2.0f, 1.0e-5f));
     CHECK_THAT (average[2], Catch::Matchers::WithinAbs (0.0f, 1.0e-5f));
 }
+
+TEST_CASE ("The correction may cut further than it boosts", "[designer]")
+{
+    // Boosting amplifies whatever the capture holds, which where the source has rolled
+    // off is its noise floor; cutting only ever removes. So the two limits differ, and
+    // this pins both ends against a source and reference far enough apart to reach them.
+    constexpr int bins = 512;
+    constexpr double sampleRate = 48000.0;
+
+    std::vector<float> source (bins, 1.0f), reference (bins, 1.0f);
+
+    // First half: reference far above source, so the correction wants a huge boost.
+    // Second half: the other way about, so it wants a huge cut.
+    for (int k = 0; k < bins / 2; ++k)
+        source[(size_t) k] = 1.0e-6f;
+
+    for (int k = bins / 2; k < bins; ++k)
+        reference[(size_t) k] = 1.0e-6f;
+
+    FilterDesigner::Params params;
+    params.smoothingOctaves = 0.0f;     // measure the clamp, not the smoother
+    params.lowFreqHz = FilterDesigner::Params::noLowBound;
+    params.highFreqHz = FilterDesigner::Params::noHighBound;
+
+    const auto db = FilterDesigner::computeCorrectionDb (source, reference, sampleRate, params);
+    REQUIRE (db.size() == (size_t) bins);
+
+    float mostBoost = 0.0f, mostCut = 0.0f;
+
+    for (const auto value : db)
+    {
+        mostBoost = std::max (mostBoost, value);
+        mostCut = std::min (mostCut, value);
+    }
+
+    CHECK_THAT (mostBoost, Catch::Matchers::WithinAbs (params.maxBoostDb, 1.0e-3f));
+    CHECK_THAT (mostCut, Catch::Matchers::WithinAbs (-params.maxCutDb, 1.0e-3f));
+
+    // The asymmetry is the point, so it is what the test says.
+    CHECK (params.maxCutDb > params.maxBoostDb);
+
+    // And 60 dB stays inside the range both phase modes agree about: past roughly 96
+    // the minimum-phase build floors its own magnitude and stops going deeper.
+    CHECK (params.maxCutDb < 96.0f);
+}

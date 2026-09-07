@@ -167,8 +167,14 @@ void MatchEngine::setCapturing (Side side, bool shouldCapture)
     // into the previous one. Safe here because capturing is still off at this point,
     // which is the only state in which reset() may be called.
     if (shouldCapture)
+    {
         for (auto& analyzer : capture.analyzer)
             analyzer.reset();
+
+        // A new take, and numbered so it can be told from the last one even if it ends
+        // up exactly as long.
+        ++capture.generation;
+    }
 
     for (auto& analyzer : capture.analyzer)
         analyzer.setCapturing (shouldCapture);
@@ -186,6 +192,20 @@ std::int64_t MatchEngine::getFrameCount (Side side) const noexcept
     return captureFor (side).analyzer[0].getFrameCount();
 }
 
+bool MatchEngine::isMatchStale() const noexcept
+{
+    if (! matched.load())
+        return false;
+
+    const auto movedOn = [] (const Capture& capture)
+    {
+        return capture.generation != capture.generationAtMatch
+            || capture.analyzer[0].getFrameCount() != capture.framesAtMatch;
+    };
+
+    return movedOn (source) || movedOn (reference);
+}
+
 bool MatchEngine::getLearnedMagnitudes (Side side, std::vector<float>& dest) const
 {
     const auto& capture = captureFor (side);
@@ -196,6 +216,18 @@ bool MatchEngine::getLearnedMagnitudes (Side side, std::vector<float>& dest) con
 
     if (! live)
     {
+        // Mid-capture the analyzer is the only truth there is. Starting a Learn wipes
+        // it, so for as long as it takes the first frame to arrive it holds nothing --
+        // and falling back here put the *previous* take on screen for that moment,
+        // which read as the curve flashing something else before the live one appeared.
+        // An empty analyzer during a capture means nothing has been learned yet, not
+        // that the old take should stand in.
+        //
+        // The fallback is for the case it was written for: a side that is not being
+        // learned, in a session reloaded from state, where the snapshot is all there is.
+        if (isCapturing (side))
+            return false;
+
         if (capture.snapshot[0].empty() || capture.snapshot[1].empty())
             return false;
 
@@ -302,13 +334,26 @@ void MatchEngine::rebuildMatch()
 
     juce::AudioBuffer<float> ir (stereo ? 2 : 1, irLength);
 
+    // Linked at the top of its range, both channels carry the same curve -- applyLink
+    // assigns the average to each rather than interpolating towards it, so they are
+    // equal to the bit. Building the second response would be building the first one
+    // again, and it is the most expensive thing this method does. Compared rather than
+    // read off the link setting, so it also catches two captures that simply agree.
+    const auto sharedCurve = stereo && correctionCache.leftDb == correctionCache.rightDb;
+
     for (int channel = 0; channel < ir.getNumChannels(); ++channel)
     {
+        if (sharedCurve && channel > 0)
+        {
+            ir.copyFrom (channel, 0, ir, 0, 0, irLength);
+            continue;
+        }
+
         const auto magnitudes = FilterDesigner::dbToMagnitudes (channelDb (channel));
 
         const auto taps = settings.linearPhase
-                              ? FilterDesigner::buildLinearPhaseIR (magnitudes, irLength)
-                              : FilterDesigner::buildMinimumPhaseIR (magnitudes, irLength);
+                              ? irBuilder.buildLinearPhase (magnitudes, irLength)
+                              : irBuilder.buildMinimumPhase (magnitudes, irLength);
 
         juce::FloatVectorOperations::copy (ir.getWritePointer (channel), taps.data(), irLength);
     }
@@ -352,20 +397,55 @@ void MatchEngine::timerCallback()
 }
 
 //==============================================================================
+bool MatchEngine::takeFor (const Capture& capture, Spectra& dest) const
+{
+    // What this side would be matched from right now: the analyzer if it holds a take,
+    // and otherwise the snapshot of the last one it committed.
+    //
+    // The fallback is what lets Match stay pressable across the moment a Learn is armed.
+    // Arming one wipes the analyzer, so for as long as it takes the first frame to land
+    // -- indefinitely, if the transport is not rolling -- that side has nothing, and a
+    // condition reading the analyzer alone disabled the button. Which was honest, and
+    // looked broken: the button went half-lit the instant you pressed Learn and came up
+    // again when audio arrived. A side that has been learned before is not empty; it is
+    // holding what it learned last time until the new take replaces it.
+    if (capture.analyzer[0].getAveragedMagnitudes (dest[0])
+        && capture.analyzer[1].getAveragedMagnitudes (dest[1]))
+        return true;
+
+    if (capture.snapshot[0].empty() || capture.snapshot[1].empty())
+        return false;
+
+    dest = capture.snapshot;
+    return true;
+}
+
+bool MatchEngine::canMatch() const
+{
+    Spectra scratch;
+    return takeFor (source, scratch) && takeFor (reference, scratch);
+}
+
 bool MatchEngine::performMatch()
 {
     Spectra sourceMags, referenceMags;
 
-    for (size_t ch = 0; ch < sourceMags.size(); ++ch)
-        if (! source.analyzer[ch].getAveragedMagnitudes (sourceMags[ch])
-            || ! reference.analyzer[ch].getAveragedMagnitudes (referenceMags[ch]))
-            return false;
+    if (! takeFor (source, sourceMags) || ! takeFor (reference, referenceMags))
+        return false;
 
     // Snapshot the captures so the match survives transport restarts and can be
     // re-tweaked (smoothing / link / bounds) without re-capturing.
     source.snapshot = std::move (sourceMags);
     reference.snapshot = std::move (referenceMags);
     captureSampleRate = sampleRate;
+
+    // Where the captures stood when this was taken, so anything arriving after it can
+    // be told apart from it.
+    for (auto* capture : { &source, &reference })
+    {
+        capture->generationAtMatch = capture->generation;
+        capture->framesAtMatch = capture->analyzer[0].getFrameCount();
+    }
 
     correctionDirty.store (true);
     rebuildMatch();
@@ -410,6 +490,12 @@ void MatchEngine::restoreFrom (const juce::XmlElement& element)
     captureSampleRate = sampleRate;
 
     correctionDirty.store (true);
+
+    for (auto* capture : { &source, &reference })
+    {
+        capture->generationAtMatch = capture->generation;
+        capture->framesAtMatch = capture->analyzer[0].getFrameCount();
+    }
 
     // Rebuild from the restored captures. prepare() reloads it too, but the host may
     // ask for the latency before playback ever starts.

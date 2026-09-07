@@ -5,10 +5,26 @@
 #include "ui/EmbeddedAssets.h"
 #include "ui/Fonts.h"
 
+#include <cmath>
+
 using namespace Celine;
 
 namespace
 {
+    /** How often the window redraws. Sixty so the curve follows the pointer rather than
+        stepping after it. */
+    constexpr int refreshHz = 60;
+
+    /** How long a live trace waits, with nothing arriving from its analyzer, before it
+        begins to fade. A quarter of a second -- comfortably longer than the gap between
+        analyzer frames at any sample rate the plugin will see, and short enough that a
+        stopped transport does not leave the trace sitting there. */
+    constexpr int ticksBeforeFading = refreshHz / 4;
+
+    /** How much of itself a fading trace keeps per tick. Held against the rate so the
+        fade still takes about a second whatever the rate is. */
+    const float fadePerTick = std::pow (0.86f, 30.0f / (float) refreshHz);
+
     // 1:2.25, and locked there — see the constrainer in the constructor. Read as
     // "one unit tall by two and a quarter across", which is the shape the graph
     // wants: a frequency axis eight octaves wide against a dB axis a fraction of
@@ -201,7 +217,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     setSize (storedWidth, storedHeight);
 
     refreshState();
-    startTimerHz (30);
+    startTimerHz (refreshHz);
 }
 
 PluginEditor::~PluginEditor()
@@ -245,11 +261,25 @@ void PluginEditor::performMatch()
 
 void PluginEditor::timerCallback()
 {
-    // While a capture is running the underlying spectra keep changing, so the
-    // preview curve has to be re-derived — but a few times a second is plenty.
-    if (++curveTick >= 4)
+    // While a capture is running the underlying spectra keep changing, so the preview
+    // curve has to be re-derived -- and the moment to do it is when the capture has
+    // actually moved on, rather than every nth tick.
+    //
+    // An analyzer frame covers half an FFT, so one lands about 23 times a second at
+    // 48k and twice that at 96k. Re-deriving faster than that rebuilds a curve identical
+    // to the one already on screen; slower, and the preview visibly lags the capture,
+    // which is what the fixed eighth-of-a-tick divisor this replaces was doing at seven
+    // and a half a second. Asking the frame counts costs nothing and is right at every
+    // rate, where any divisor is right at one of them.
+    //
+    // It stays cheap because it is only the preview: deriving the curve is 0.06 ms, and
+    // the filter actually in force is untouched until Match is pressed.
+    const CaptureProgress progress { processorRef.getSourceFrameCount(),
+                                     processorRef.getReferenceFrameCount() };
+
+    if (progress != captureProgress)
     {
-        curveTick = 0;
+        captureProgress = progress;
 
         if (processorRef.isSourceCapturing() || processorRef.isReferenceCapturing())
             processorRef.markCorrectionDirty();
@@ -293,12 +323,24 @@ void PluginEditor::refreshState()
     referenceTab.setActionActive (referenceCapturing);
 
     const auto matched = processorRef.isMatched();
+
+    // A match is stale once either capture has moved on from the one it was built from,
+    // which is what starting a Learn does immediately. Saying so is the point: the
+    // filter you are hearing is not the one the captures now describe, and nothing else
+    // on screen would tell you.
+    const auto stale = processorRef.isMatchStale();
+
     auto& curveTab = tabBar.getTab (PhaseTabBar::eqCurve);
-    curveTab.setStatus (matched ? "Match active" : (srcFrames > 0 && refFrames > 0 ? "Ready to match"
-                                                                                  : "Not matched"),
+    const auto canMatch = processorRef.canMatch();
+
+    curveTab.setStatus (stale    ? "Match out of date"
+                      : matched  ? "Match active"
+                      : canMatch ? "Ready to match"
+                                 : "Not matched",
                         matched);
     curveTab.setActionActive (matched);
-    curveTab.getActionButton().setEnabled (srcFrames > 0 && refFrames > 0);
+    curveTab.setActionAttention (stale);
+    curveTab.getActionButton().setEnabled (canMatch);
 
     refreshDisplay();
 
@@ -322,33 +364,36 @@ void PluginEditor::refreshDisplay()
         display.setCurve (curve, scratch);
     };
 
-    // The two moving traces fade out when their analyzer stops producing frames,
+    // The two moving traces fade out once their analyzer has stopped producing frames,
     // rather than standing still on the last one. Hosts differ on what they do to a
     // plugin when the transport stops -- some keep calling processBlock with silence,
     // in which case the average decays on its own, and some stop calling it at all,
     // which used to leave the last spectrum frozen on screen looking like live audio.
     // Driving the fade off the frame counter covers both, because it asks the question
     // that actually matters: is anything still arriving?
-    const auto fade = [] (std::int64_t frames, std::int64_t& lastSeen, float& level)
+    //
+    // The wait before it starts is the point: an analyzer frame covers half an FFT, so
+    // one arrives around every 43 ms, while this timer comes round every 17. Most ticks
+    // therefore find no new frame even with audio playing, and fading on the first of
+    // them made both traces flicker.
+    const auto fade = [] (std::int64_t frames, TraceFade& state)
     {
-        if (frames != lastSeen)
+        if (frames != state.lastFrames)
         {
-            lastSeen = frames;
-            level = 1.0f;
+            state.lastFrames = frames;
+            state.ticksWithoutFrame = 0;
+            state.level = 1.0f;
         }
-        else
+        else if (++state.ticksWithoutFrame > ticksBeforeFading)
         {
-            // The timer runs at 30 Hz, so this is gone in about a second: slow enough
-            // to read as a decay rather than a cut, quick enough that a stopped
-            // transport does not leave a ghost sitting on the graph.
-            level *= 0.86f;
+            state.level *= fadePerTick;
         }
 
-        return level;
+        return state.level;
     };
 
-    display.setLiveFade (fade (processorRef.getLiveOutputFrameCount(), lastCurrentFrames, currentFade),
-                         fade (processorRef.getLiveReferenceFrameCount(), lastReferenceFrames, referenceFade));
+    display.setLiveFade (fade (processorRef.getLiveOutputFrameCount(), currentFade),
+                         fade (processorRef.getLiveReferenceFrameCount(), referenceFade));
 
     using Curve = SpectrumDisplay::Curve;
     supply (Curve::liveCurrent, processorRef.getLiveOutputMagnitudes (liveCurrentScratch), liveCurrentScratch);

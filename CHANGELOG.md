@@ -8,6 +8,22 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Added
 
+- **Match stays offered while a side is being re-learned.** Arming a Learn wipes that
+  analyzer, so until the first frame arrives — indefinitely, with the transport stopped —
+  the side held nothing, and the Match button read that as "cannot match": it went
+  half-lit the instant you pressed Learn and came back up when audio arrived. A side that
+  has been learned before is not empty; it holds what it committed last time until the
+  new take replaces it, and Match now falls back to that. The first match of a session is
+  unchanged: with nothing committed on either side, both still have to be learned first.
+- **The Match button turns orange when the match is out of date.** Start a Learn, or
+  leave a capture running past a match, and the filter you are hearing is no longer the
+  one your captures describe — with nothing on screen to say so. The tab now reads
+  **Match out of date** and its button goes orange, which is its own themeable colour
+  rather than the house red: red already means "armed, capturing now" here, and the two
+  would read as the same thing. A take is identified by its number as well as its
+  length, so re-learning for exactly as long as last time still counts as a new take. A
+  session reloaded from state is not stale — its captures are the ones its match was
+  built from.
 - Closing the theme editor with colours you have not saved now asks, offering **Save**,
   **Discard** or **Cancel**. Every way out goes through it — the Close button, the escape
   key and the title bar's own close button.
@@ -39,6 +55,39 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Changed
 
+- The preview curve is re-derived when the capture has actually moved on, rather than
+  every eighth frame. An analyzer frame covers half an FFT, so one lands about 23 times
+  a second at 48k and twice that at 96k — the old fixed divisor redrew seven and a half
+  times a second, which visibly lagged what was being learned. Asking the frame counts
+  costs nothing and is right at every sample rate, where a divisor is right at one of
+  them. Deriving the curve is 0.06 ms and touches only the display; the filter in force
+  is untouched until Match is pressed.
+- **The correction can cut further than it boosts**, 60 dB down against 24 up, where
+  both ends were 24. They are not the same risk: a boost amplifies whatever the capture
+  holds at that frequency, and where the source has rolled off — a guitar cab above
+  5 kHz — that is the noise floor and the analysis window's leakage rather than signal.
+  A cut only ever removes. 60 is where the two phase modes still agree: past roughly 96
+  the minimum-phase build floors its own magnitude, and asking for a deeper notch starts
+  returning a shallower one.
+- The window redraws at 60 Hz rather than 30, so the curve and the meters follow the
+  pointer instead of stepping after it. The correction is still rebuilt seven and a half
+  times a second while a capture is running — that count is now held against the refresh
+  rate rather than written out in ticks, because rebuilding it is the expensive thing in
+  that callback and doubling the frames should not double it.
+- Menus and tooltips carry a faint rule, the same one the callout bubble wears. On macOS
+  the window's own shadow gave them an edge for free; on Windows there is no shadow to
+  borrow one from, so they ran into whatever was behind them. Drawn rather than
+  inherited, so both platforms show the same thing.
+- Tooltips cast a shadow, sitting inside a margin reserved for it. A tooltip is the one
+  thing genuinely floating above the window, and a dark panel on a dark window with
+  nothing lifting it off is just a slightly different dark. The shadow is drawn rather
+  than asked for: JUCE's own shadower builds a rectangle, which behind a rounded panel is
+  a dark wedge in each corner, so it stays declined. Menus keep the rule and no shadow --
+  a menu is a desktop window sized to its items, so the only way to make a margin for one
+  is to grow the window, which moves the menu off the button it was opened from and
+  leaves the margin showing as a black box wherever the window turns out to have no
+  per-pixel alpha. The tooltip can have one because it is a child of the editor rather
+  than a window of its own.
 - The look and feel is split: `ui/LookAndFeelBase` carries everything the four plugins
   draw the same way, and `ui/PluginLookAndFeel` is a subclass for what this one does
   differently. Fifteen files under `source/ui/` are now byte-identical across all four,
@@ -80,6 +129,28 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Fixed
 
+- **Starting a Learn no longer flashes the previous take.** The learned curve falls back
+  to the snapshot a committed match was taken from, which is all a reloaded session has
+  to draw. Starting a Learn wipes the analyzer, so until the first frame arrived that
+  fallback stood in — putting the old curve on screen for a moment before the live one
+  replaced it. A side being learned now reports nothing until it has something, and the
+  fallback is left to the case it was written for.
+- **The spectrum no longer flickers while audio is playing.** An analyzer frame covers
+  half an FFT, so one arrives about every 43 ms, while the window now redraws every 17 —
+  most ticks therefore found no new frame even mid-playback, and the trace, which fades
+  when nothing is arriving, started fading on the first of them and snapped back on the
+  next. It now waits a quarter of a second before it begins, which is longer than the gap
+  between frames at any rate the plugin will see and still short enough that a stopped
+  transport does not leave a trace sitting on the graph. The fade itself is held against
+  the refresh rate, so it takes the second it always took.
+- **Dragging a control no longer spikes the CPU.** A rebuild designs the correction's
+  impulse response, and it was constructing the 32768-point transform to do it with on
+  every call — about 15 ms of setup against 0.2 ms of actual transforms, twice per
+  rebuild, every 120 ms for as long as the drag lasted. That is a third of a core, on the
+  thread that also has to draw the window. The transform is now kept between rebuilds,
+  and when the channels are linked — which is how the plugin ships, and where both
+  channels carry the same curve to the bit — the second response is copied rather than
+  built a second time. A stereo rebuild went from 31 ms to 1.
 - **The caret in a value box was invisible on the light strip.** It was the last thing
   in the box still taking its colour from the look and feel, which sets it for the dark
   half of the design -- so on the near-white panel the text cursor was white on white.

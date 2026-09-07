@@ -53,12 +53,32 @@ void PhaseTab::setSelected (bool shouldBeSelected)
 
 void PhaseTab::applyColours()
 {
+    refreshActionColours();
+}
+
+void PhaseTab::refreshActionColours()
+{
     // Red is what "this is armed" looks like everywhere else in the plugin, so the
-    // action button borrows it whether it is a Learn or the Match.
-    action.setColour (juce::TextButton::buttonColourId, Theme::record().withAlpha (0.22f));
-    action.setColour (juce::TextButton::buttonOnColourId, Theme::record());
-    action.setColour (juce::TextButton::textColourOffId, Theme::record().brighter (0.35f));
+    // action button borrows it whether it is a Learn or the Match -- until the match it
+    // committed goes out of date, when it turns orange to say so. Orange because red is
+    // already spoken for here: it would read as "capturing", which is the one thing
+    // this is not.
+    const auto accentColour = attention ? Theme::stale() : Theme::record();
+
+    action.setColour (juce::TextButton::buttonColourId, accentColour.withAlpha (0.22f));
+    action.setColour (juce::TextButton::buttonOnColourId, accentColour);
+    action.setColour (juce::TextButton::textColourOffId, accentColour.brighter (0.35f));
     action.setColour (juce::TextButton::textColourOnId, Theme::text());
+}
+
+void PhaseTab::setActionAttention (bool shouldWantAttention)
+{
+    if (attention == shouldWantAttention)
+        return;
+
+    attention = shouldWantAttention;
+    refreshActionColours();
+    action.repaint();
 }
 
 void PhaseTab::setStatus (const juce::String& newStatus, bool stageHasData)

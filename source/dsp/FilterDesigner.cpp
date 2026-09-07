@@ -8,6 +8,14 @@
 
 namespace FilterDesigner
 {
+    /** The length the minimum-phase build works at: four times the response it keeps.
+        The cepstrum is computed on a circle, so it wraps; the further the working
+        length runs past the response, the less of that wrap lands in the kept taps. */
+    static int minimumPhaseWorkSize (int irLength) noexcept
+    {
+        return juce::nextPowerOfTwo (irLength * 4);
+    }
+
     static float linToDb (float lin) noexcept
     {
         constexpr float floor = 1.0e-9f;
@@ -176,7 +184,7 @@ namespace FilterDesigner
         {
             const auto ratio = (referenceMag[k] + epsilon) / (sourceMag[k] + epsilon);
             auto db = linToDb (ratio);
-            db = std::clamp (db, -params.maxGainDb, params.maxGainDb);
+            db = std::clamp (db, -params.maxCutDb, params.maxBoostDb);
             correctionDb[k] = db * amount;
         }
 
@@ -268,10 +276,14 @@ namespace FilterDesigner
         return mag[lower] + fraction * (mag[upper] - mag[lower]);
     }
 
-    std::vector<float> buildLinearPhaseIR (const std::vector<float>& correctionMag, int fftSize)
+    /** The linear-phase build, given the transform to do it with. Both the free
+        function and IrBuilder come through here; they differ only in where the
+        transform comes from and how long it lives. */
+    static std::vector<float> linearPhaseWith (juce::dsp::FFT& fft,
+                                               const std::vector<float>& correctionMag,
+                                               int fftSize)
     {
-        const int order = (int) std::round (std::log2 ((double) fftSize));
-        juce::dsp::FFT fft (order);
+        jassert (fft.getSize() == fftSize);
 
         const int numBins = fftSize / 2 + 1;
 
@@ -318,14 +330,13 @@ namespace FilterDesigner
         return ir;
     }
 
-    std::vector<float> buildMinimumPhaseIR (const std::vector<float>& correctionMag, int irLength)
+    /** The minimum-phase build, given the transform to do it with. @see linearPhaseWith */
+    static std::vector<float> minimumPhaseWith (juce::dsp::FFT& fft,
+                                                const std::vector<float>& correctionMag,
+                                                int irLength)
     {
-        // Work at four times the length we want to keep. The cepstrum is computed on a
-        // circle, so it wraps; the further the working length runs past the response,
-        // the less of that wrap lands in the taps we keep.
-        const int workSize = juce::nextPowerOfTwo (irLength * 4);
-        const int order = (int) std::round (std::log2 ((double) workSize));
-        juce::dsp::FFT fft (order);
+        const int workSize = minimumPhaseWorkSize (irLength);
+        jassert (fft.getSize() == workSize);
 
         const int numBins = workSize / 2 + 1;
 
@@ -402,5 +413,46 @@ namespace FilterDesigner
         }
 
         return ir;
+    }
+
+    //==============================================================================
+    std::vector<float> buildLinearPhaseIR (const std::vector<float>& correctionMag, int irLength)
+    {
+        juce::dsp::FFT fft (juce::roundToInt (std::log2 ((double) irLength)));
+        return linearPhaseWith (fft, correctionMag, irLength);
+    }
+
+    std::vector<float> buildMinimumPhaseIR (const std::vector<float>& correctionMag, int irLength)
+    {
+        const auto workSize = minimumPhaseWorkSize (irLength);
+
+        juce::dsp::FFT fft (juce::roundToInt (std::log2 ((double) workSize)));
+        return minimumPhaseWith (fft, correctionMag, irLength);
+    }
+
+    //==============================================================================
+    IrBuilder::IrBuilder() = default;
+    IrBuilder::~IrBuilder() = default;
+
+    juce::dsp::FFT& IrBuilder::transformOfSize (int size)
+    {
+        if (fft == nullptr || fftSize != size)
+        {
+            fft = std::make_unique<juce::dsp::FFT> (juce::roundToInt (std::log2 ((double) size)));
+            fftSize = size;
+        }
+
+        return *fft;
+    }
+
+    std::vector<float> IrBuilder::buildLinearPhase (const std::vector<float>& correctionMag, int irLength)
+    {
+        return linearPhaseWith (transformOfSize (irLength), correctionMag, irLength);
+    }
+
+    std::vector<float> IrBuilder::buildMinimumPhase (const std::vector<float>& correctionMag, int irLength)
+    {
+        const auto workSize = minimumPhaseWorkSize (irLength);
+        return minimumPhaseWith (transformOfSize (workSize), correctionMag, irLength);
     }
 }

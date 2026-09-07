@@ -1,5 +1,8 @@
 #pragma once
 
+#include <juce_dsp/juce_dsp.h>
+
+#include <memory>
 #include <vector>
 
 /**
@@ -15,7 +18,22 @@ namespace FilterDesigner
     {
         float amount = 1.0f;                  // -1..1, how much of the correction to apply
                                               // (negative inverts it)
-        float maxGainDb = 24.0f;              // per-bin boost/cut limit
+        /** How far the correction may go per bin, asymmetrically, because boosting
+            and cutting are not the same risk.
+
+            A boost amplifies whatever is in the capture at that frequency, and where
+            the source has rolled off -- a guitar cab above 5 kHz, say -- what is there
+            is the noise floor and the analysis window's leakage rather than signal. So
+            boosts stay at 24 dB.
+
+            A cut only ever removes, so it can go further, and 60 dB is where the two
+            phase modes still agree about what the curve does. Past roughly 96 dB the
+            minimum-phase build stops being monotonic -- its cepstrum floors the
+            magnitude at 1e-6 -- and asking for a deeper notch starts returning a
+            shallower one. 60 also keeps a single dead bin in a capture from gouging
+            its neighbours when the smoother below spreads it. */
+        float maxBoostDb = 24.0f;
+        float maxCutDb = 60.0f;
         float smoothingOctaves = 1.0f / 3.0f; // width of the Gaussian window; 0 = no smoothing
         float lowFreqHz = 20.0f;              // correction fades out below this
         float highFreqHz = 20000.0f;          // correction fades out above this
@@ -84,4 +102,43 @@ namespace FilterDesigner
         causal in the cepstral domain, so folding the cepstrum onto its causal half
         and exponentiating back is the phase that goes with this magnitude. */
     std::vector<float> buildMinimumPhaseIR (const std::vector<float>& correctionMag, int irLength);
+
+    /**
+        Builds the same two responses, but keeps the transform between calls.
+
+        Which is the whole reason it exists. Constructing the FFT the minimum-phase
+        build works at -- 32768 points, four times the response, so the cepstrum's wrap
+        lands outside the taps that are kept -- costs about fifteen milliseconds, and
+        the transforms themselves take a fifth of one. The free functions above build
+        that object and throw it away on every call, so a rebuild spent nine tenths of
+        its time on setup it had already done. Under a drag, where a rebuild runs every
+        120 ms, that was a third of a core going on nothing, on the message thread,
+        which is also the thread that has to draw.
+
+        Not thread-safe, and not meant to be: one lives in MatchEngine, and rebuilds
+        happen on the message thread.
+    */
+    class IrBuilder
+    {
+    public:
+        IrBuilder();
+        ~IrBuilder();
+
+        /** @see buildLinearPhaseIR */
+        std::vector<float> buildLinearPhase (const std::vector<float>& correctionMag, int irLength);
+
+        /** @see buildMinimumPhaseIR */
+        std::vector<float> buildMinimumPhase (const std::vector<float>& correctionMag, int irLength);
+
+    private:
+        /** The transform for a given size, made on the first call that wants it and
+            kept until one wants a different size -- which in practice never happens,
+            since the length is fixed at compile time. */
+        juce::dsp::FFT& transformOfSize (int size);
+
+        std::unique_ptr<juce::dsp::FFT> fft;
+        int fftSize = 0;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IrBuilder)
+    };
 }

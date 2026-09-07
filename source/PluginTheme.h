@@ -9,7 +9,7 @@
 // meaning survives a change of palette -- which is now something anybody can make from
 // the Theme window.
 //
-// These three are chosen as a set, and the set is the point: blue and red are what mix
+// The first three are chosen as a set, and the set is the point: blue and red are what mix
 // to violet, so the colour of the thing the plugin builds says where it came from. Hue
 // bears it out -- 199 and 357 degrees, with the correction's violet at 262, very near
 // the midpoint of the two going round through purple.
@@ -22,3 +22,9 @@ inline juce::Colour reference() { return colour (Role::reference); }
 
 /** The correction the plugin is applying. */
 inline juce::Colour correction() { return colour (Role::correction); }
+
+//======================================================================
+
+/** A match that no longer reflects what has been learned since. Orange rather than the
+    house's red, because red here already means "armed, capturing now". */
+inline juce::Colour stale() { return colour (Role::stale); }

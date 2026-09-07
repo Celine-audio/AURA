@@ -93,9 +93,21 @@ public:
     /** True once a match curve has been computed and loaded. */
     bool isMatched() const noexcept { return matched.load(); }
 
+    /** True when a match is in force but either capture has moved on since it was
+        taken -- so the filter being applied is no longer the one the captures now
+        describe, and Match wants pressing again. False when there is no match to be
+        stale, and false for a session reloaded from state, where the captures are the
+        ones the stored match was built from. */
+    bool isMatchStale() const noexcept;
+
     /** Snapshots both captures and builds the filter from them. Returns false if
-        either side is empty. */
+        either side is empty -- meaning it holds neither a take being learned now nor
+        one committed before. */
     bool performMatch();
+
+    /** Whether performMatch() would do anything, which is what decides whether the
+        Match button is offered. */
+    bool canMatch() const;
 
     /** The correction curves being applied, recomputed only when something has
         actually changed. This is the same data the convolution is built from, so the
@@ -143,6 +155,10 @@ public:
     void restoreFrom (const juce::XmlElement& element);
 
 private:
+    /** Kept rather than made per rebuild: see FilterDesigner::IrBuilder for why that
+        is the difference between a rebuild costing thirty milliseconds and two. */
+    FilterDesigner::IrBuilder irBuilder;
+
     using Spectra = std::array<std::vector<float>, 2>;
 
     // Per-channel captures, so the correction can be derived independently for L and
@@ -151,6 +167,20 @@ private:
     {
         std::array<SpectrumAnalyzer, 2> analyzer;
         Spectra snapshot; // taken when Match was pressed
+
+        // Which take this is, counting from the first Learn ever started on this side.
+        // The frame count alone cannot say: start a fresh Learn, run it exactly as long
+        // as the one before, and the count comes back to the number the match was taken
+        // at -- a different recording that looks identical to the one in force. So the
+        // take is numbered, and the pair is what identifies a capture.
+        std::int64_t generation = 0;
+
+        // Where the pair stood when the snapshot was taken. A match is stale when the
+        // capture no longer matches it: frames have arrived since, or a fresh Learn has
+        // been started. Either way the filter in force was built from something other
+        // than what has been learned.
+        std::int64_t generationAtMatch = 0;
+        std::int64_t framesAtMatch = 0;
     };
 
     /** Re-maps a snapshot taken at one sample rate onto the bin grid of another.
@@ -163,6 +193,10 @@ private:
         session reload between two projects, and also when the interface's rate is
         changed with the plugin loaded. */
     static void rebaseSnapshot (Spectra&, double fromSampleRate, double toSampleRate);
+
+    /** The spectra one side would be matched from: what it is learning now, or failing
+        that what it committed last time. */
+    bool takeFor (const Capture&, Spectra& dest) const;
 
     Capture& captureFor (Side) noexcept;
     const Capture& captureFor (Side) const noexcept;

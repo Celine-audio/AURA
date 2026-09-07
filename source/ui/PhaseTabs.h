@@ -33,6 +33,11 @@ public:
     /** Draws the action button as engaged — a capture running, or a match applied. */
     void setActionActive (bool shouldBeActive);
 
+    /** Draws the action button as wanting pressing again: what it committed no longer
+        reflects what has been learned since. Only the Match tab uses this — a Learn
+        cannot go out of date, it either ran or it did not. */
+    void setActionAttention (bool shouldWantAttention);
+
     /** True while this tab's action is running a capture, which is the only state the
         red indicator means. */
     bool isCapturing() const noexcept { return arms && action.getToggleState(); }
@@ -74,8 +79,13 @@ private:
     juce::TextButton action;
     const bool arms;
 
+    // Which colour the action button wears. Held rather than read as it draws, the
+    // way every other colour in here is, so a theme change goes through applyColours.
+    void refreshActionColours();
+
     bool selected = false;
     bool hasData = false;
+    bool attention = false;
     bool hovered = false;
     bool isFirst = false;
     bool isLast = false;
