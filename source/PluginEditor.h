@@ -7,6 +7,7 @@
 #include "ui/PluginLookAndFeel.h"
 #include "ui/Theme.h"
 #include "ui/ParameterControl.h"
+#include "ui/SliderRowControl.h"
 #include "ui/PhaseTabs.h"
 #include "ui/IconButton.h"
 #include "ui/SpectrumDisplay.h"

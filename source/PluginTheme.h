@@ -41,3 +41,28 @@ inline juce::Colour graphLine() { return colour (Role::graphLine); }
 /** The veil over the frequencies outside the band. Drawn at low alpha, so this is read
     as a tint rather than a fill. */
 inline juce::Colour graphShade() { return colour (Role::graphShade); }
+
+//======================================================================
+// The light panel: the band along the bottom, and everything standing on it.
+//
+// The house design is two-tone and says so, but this is the one window that has the
+// second tone in it. So the ground and the two inks are declared here rather than in
+// the kit -- a plugin whose window is dark throughout has nothing to say about any of
+// them.
+
+/** The band itself, near-white: the design's other half. */
+inline juce::Colour panel() { return colour (Role::panel); }
+
+/** Ink on it, where the window's usual light-on-dark would be invisible. */
+inline juce::Colour textOnPanel() { return colour (Role::textOnPanel); }
+
+/** A knob cap or slider grip standing on it, dark for the same reason. handle() is
+    the near-white one every other control in the window wears; against this ground it
+    would disappear. */
+inline juce::Colour handleOnPanel() { return colour (Role::handleOnPanel); }
+
+//======================================================================
+
+/** Anything live and committing -- the dot while a stage is listening, and the Learn
+    button while it runs. Only this plugin captures anything. */
+inline juce::Colour record() { return colour (Role::record); }

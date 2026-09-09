@@ -56,7 +56,7 @@
     X (headerBackground,  "Header band",         "Header",   0xff3b334b)                \
     X (headerText,        "Logo and wordmark",   "Header",   0xfff9fbff)                \
                                                                                         \
-    X (graphText,         "Labels",              "Graph",    0xffd9d9d9)                \
+    X (graphText,         "Labels",              "Graph",    0xffb5b3c4)                \
     X (grid,              "Grid line",           "Graph",    0xff5c5c5c)                \
                                                                                         \
     X (button,            "Button",              "Controls", 0xff37364a)                \
@@ -65,7 +65,6 @@
     X (surfaceBright,     "Hover and selection", "Controls", 0xff4f485d)                \
     X (track,             "Unfilled track",      "Controls", 0xff565656)                \
     X (handle,            "Knob cap and grip",   "Controls", 0xfff9fbff)                \
-    X (handleOnPanel,     "Grip, on a panel",    "Controls", 0xff28262e)                \
     X (icon,              "Icon",                "Controls", 0xffd9d9d9)                \
     X (iconLit,           "Icon, lit",           "Controls", 0xfff9fbff)                \
                                                                                         \
@@ -73,14 +72,11 @@
     X (textDim,           "Text, idle",          "Text",     0xffd9d9d9)                \
     X (comment,           "Text, secondary",     "Text",     0xff888791)                \
     X (textDisabled,      "Text, disabled",      "Text",     0xff888791)                \
-    X (textOnPanel,       "Text on a panel",     "Text",     0xff28262e)                \
                                                                                         \
     X (chrome,            "Popup ground",        "Panels",   0xff3b334b)                \
-    X (panel,             "Light panel",         "Panels",   0xfff9fbff)                \
                                                                                         \
     X (accent,            "Accent",              "Accents",  0xff9761dc)                \
                                                                                         \
-    X (record,            "Recording",           "States",   0xfff92672)                \
     X (danger,            "Danger",              "States",   0xfff92672)                \
     X (error,             "Error",               "States",   0xfff92672)
 

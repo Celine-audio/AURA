@@ -19,6 +19,11 @@ namespace Celine
         panels you reach into are near-white. A new widget has to know which side of
         that line it sits on, because the text colour flips with it.
 
+        Only the dark half is here. A plugin that actually puts a light panel in front
+        of you declares its ground and its ink itself -- see PluginThemeRoles.h -- for
+        the same reason nothing else here is offered to a window that cannot paint with
+        it. The two-tone rule is the house's; the second tone is not always present.
+
         **Every one of these is a lookup, not a constant.** What they answer is whatever
         the theme in force says -- see ThemePalette.h. Two consequences worth knowing
         before writing a control:
@@ -117,12 +122,6 @@ namespace Celine
             apart could not darken its panels without the knobs going with them. */
         inline juce::Colour handle() { return colour (Role::handle); }
 
-        /** The same grip where it stands on a light panel, in dark ink for the same
-            reason textOnPanel() exists: the near-white one is invisible there. Two
-            roles rather than one because the design has two halves, and a grip has to
-            be findable on both. */
-        inline juce::Colour handleOnPanel() { return colour (Role::handleOnPanel); }
-
         /** The glyph inside a toolbar or panel button, at rest.
 
             Its own role rather than textDim(), which it used to be. An icon is not a
@@ -158,21 +157,13 @@ namespace Celine
             the same value is not the same as their being one colour. */
         inline juce::Colour textDisabled() { return colour (Role::textDisabled); }
 
-        /** On the light panels, where the above would be invisible. */
-        inline juce::Colour textOnPanel() { return colour (Role::textOnPanel); }
-
         //======================================================================
-        // Panels. The two grounds a panel can have, one for each half of the design.
+        // Panels.
 
-        /** The dark ground a popup is built on -- the About sheet, the export sheet,
-            this editor. Named for the chrome it matches rather than for the header,
-            which has had its own colour since the band and the popups stopped having
-            to agree. */
+        /** The dark ground a popup is built on -- the About sheet, the Theme window.
+            Named for the chrome it matches rather than for the header, which has had
+            its own colour since the band and the popups stopped having to agree. */
         inline juce::Colour chrome() { return colour (Role::chrome); }
-
-        /** The light panels: the design's other half, where the ink flips to
-            textOnPanel(). */
-        inline juce::Colour panel() { return colour (Role::panel); }
 
         //======================================================================
         // Accents.
@@ -188,9 +179,6 @@ namespace Celine
 
         //======================================================================
         // States.
-
-        /** Anything live and committing. */
-        inline juce::Colour record() { return colour (Role::record); }
 
         inline juce::Colour danger() { return colour (Role::danger); }
         inline juce::Colour error()  { return colour (Role::error); }
