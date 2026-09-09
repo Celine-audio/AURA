@@ -28,3 +28,16 @@ inline juce::Colour correction() { return colour (Role::correction); }
 /** A match that no longer reflects what has been learned since. Orange rather than the
     house's red, because red here already means "armed, capturing now". */
 inline juce::Colour stale() { return colour (Role::stale); }
+
+//======================================================================
+// The band: the stretch of the spectrum being worked on, and everything outside it.
+// Shared with nothing, because nothing else in the house draws one.
+
+/** The band edges: the vertical rules you can take hold of and move. Not line(), which
+    they used to be -- these are a control drawn as a line, and a theme that could not
+    brighten them without brightening every border had no way to make them findable. */
+inline juce::Colour graphLine() { return colour (Role::graphLine); }
+
+/** The veil over the frequencies outside the band. Drawn at low alpha, so this is read
+    as a tint rather than a fill. */
+inline juce::Colour graphShade() { return colour (Role::graphShade); }

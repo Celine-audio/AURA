@@ -15,8 +15,14 @@
     The fourth is the one state only this plugin has: a match that no longer reflects what
     has been learned since. Orange rather than the house's red, because red here already
     means "armed, capturing now" and the two would read as the same thing. And its own
-    role rather than the shared Warning, for the same reason the curves are not shared --
-    nothing else in the house has a match to go out of date.
+    role rather than one of the shared states, for the same reason the curves are not
+    shared -- nothing else in the house has a match to go out of date.
+
+    The band furniture is here for the same reason, less obviously. Every plugin in the
+    house draws a graph, so labels and grid lines are shared -- but only this one draws a
+    *band* on it, a stretch of the spectrum with two edges you take hold of and move. A
+    plugin with no band has nothing to say about the colour of its edge, and offering it
+    the control anyway is how a theme editor fills up with rows that do nothing.
 
     See ui/ThemeRoles.h for the shape of an entry and for the warning about renaming.
 */
@@ -24,4 +30,7 @@
     X (current,    "Current signal",    "Curves", 0xff4fc9e8)                           \
     X (reference,  "Reference",         "Curves", 0xfff2545b)                           \
     X (correction, "Correction",        "Curves", 0xff9761dc)                           \
-    X (stale,      "Match out of date", "States", 0xffe8913f)
+    X (stale,      "Match out of date", "Curves", 0xffe8913f)                           \
+                                                                                        \
+    X (graphLine,  "Band edge",         "Band",   0xffd9d9d9)                           \
+    X (graphShade, "Outside the band",  "Band",   0xff3b334b)

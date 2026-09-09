@@ -130,9 +130,14 @@ void SpectrumDisplay::drawGrid (juce::Graphics& g, PlotGeometry plot, juce::Rect
         g.fillRect (juce::Rectangle<float> (x, y, w, h));
     };
 
+    // The alphas are not the ones this used to carry. It drew in literal white, which
+    // is the one thing nothing outside Theme.h is allowed to do -- and it meant the
+    // theme editor's "Grid line" moved nothing at all. Reaching the same picture from
+    // grid()'s mid-grey instead of from white takes about four times the alpha, since
+    // the grey starts that much nearer the ground it is laid on.
     for (const auto& line : freqLines)
     {
-        g.setColour (juce::Colours::white.withAlpha (line.label != nullptr ? 0.07f : 0.035f));
+        g.setColour (Theme::grid().withAlpha (line.label != nullptr ? 0.30f : 0.15f));
         hairline (plot.freqToX (line.hz), plot.getY(), 1.0f, plot.getHeight());
     }
 
@@ -150,12 +155,12 @@ void SpectrumDisplay::drawGrid (juce::Graphics& g, PlotGeometry plot, juce::Rect
         // The middle is the correction's zero — no boost, no cut. Now that the
         // correction is drawn on every tab, that line means something on every tab.
         const auto centre = i * 2 == PlotGeometry::gridDivisions;
-        g.setColour (juce::Colours::white.withAlpha (centre ? 0.22f : 0.055f));
+        g.setColour (Theme::grid().withAlpha (centre ? 0.90f : 0.23f));
         hairline (plot.getX(), y, plot.getWidth(), 1.0f);
     }
 
     g.setFont (Fonts::light (10.0f));
-    g.setColour (Theme::textDim());
+    g.setColour (Theme::graphText());
 
     for (const auto& line : freqLines)
     {
@@ -175,7 +180,7 @@ void SpectrumDisplay::drawGrid (juce::Graphics& g, PlotGeometry plot, juce::Rect
     // which was in play, but with the correction drawn on every tab both always are,
     // and a column that changed weight on a tab switch was the same restlessness the
     // gridlines had. The unit captions at the foot of each are what tell them apart.
-    const auto axisText = Theme::text().withAlpha (0.8f);
+    const auto axisText = Theme::graphText().withAlpha (0.8f);
 
     g.setColour (axisText);
 
@@ -383,14 +388,14 @@ void SpectrumDisplay::drawBandShading (juce::Graphics& g, PlotGeometry area) con
     if (bandLow > PlotGeometry::minFreq)
     {
         const auto x = area.freqToX (bandLow);
-        g.setColour (Theme::chrome().withAlpha (0.55f));
+        g.setColour (Theme::graphShade().withAlpha (0.55f));
         g.fillRect (juce::Rectangle<float> (area.getX(), area.getY(), x - area.getX(), area.getHeight()));
     }
 
     if (bandHigh < PlotGeometry::maxFreq)
     {
         const auto x = area.freqToX (bandHigh);
-        g.setColour (Theme::chrome().withAlpha (0.55f));
+        g.setColour (Theme::graphShade().withAlpha (0.55f));
         g.fillRect (juce::Rectangle<float> (x, area.getY(), area.getRight() - x, area.getHeight()));
     }
 
@@ -401,7 +406,7 @@ void SpectrumDisplay::drawBandShading (juce::Graphics& g, PlotGeometry area) con
         const auto x = area.freqToX (frequency);
         const auto live = dragging == which || (! dragging.has_value() && hovered == which);
 
-        g.setColour (live ? Theme::correction() : Theme::line().withAlpha (0.75f));
+        g.setColour (live ? Theme::correction() : Theme::graphLine().withAlpha (0.75f));
         g.fillRect (juce::Rectangle<float> (x, area.getY(), 1.0f, area.getHeight()));
 
         // The tab. Something to aim at, and the only thing that says the line moves.

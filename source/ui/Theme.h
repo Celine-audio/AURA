@@ -35,23 +35,52 @@ namespace Celine
     namespace Theme
     {
         //======================================================================
-        // Surfaces.
+        // The window. The frame everything else sits in.
 
-        /** Titlebar, toolbar, inspector, ruler chrome. */
-        inline juce::Colour chrome() { return colour (Role::chrome); }
+        /** The ground the whole window is painted on, darker than anything else so the
+            panels and the graph read as things laid on it rather than holes in it. */
+        inline juce::Colour consoleBackground() { return colour (Role::consoleBackground); }
 
-        /** The sheet you draw on. */
+        /** The step up from that ground: the graph's own panel, and the well a control
+            sits in. Anything you look *into* rather than at. */
         inline juce::Colour background() { return colour (Role::background); }
 
-        /** The light panels. */
-        inline juce::Colour panel() { return colour (Role::panel); }
+        /** Borders, on controls and panels alike. A rule you can take hold of and drag
+            is a control rather than a border, and belongs to whichever plugin has
+            one. */
+        inline juce::Colour line() { return colour (Role::line); }
 
-        /** The dark slate that sits on chrome: the popup panel, the tooltip, and
-            anything else that is a surface rather than a control. */
-        inline juce::Colour surface() { return colour (Role::surface); }
+        //======================================================================
+        // The header. Only what the toolbar band owns outright.
+        //
+        // The icon buttons are deliberately not here. A button is a control wherever it
+        // is standing, and GALLERY puts the same class in a side panel; filing its ink
+        // under Header would mean changing the header moved something in another corner
+        // of a different plugin. They read from the Controls and Text roles below.
 
-        /** Hover and selection, a step up from surface. */
-        inline juce::Colour surfaceBright() { return colour (Role::surfaceBright); }
+        /** The toolbar band itself. */
+        inline juce::Colour headerBackground() { return colour (Role::headerBackground); }
+
+        /** The logo and the wordmark, which are tinted rather than drawn -- so this is
+            the one colour that is the brand rather than the interface. Its own role
+            because the mark is the last thing most themes want to restyle, and until
+            now it followed text() and moved whenever any label did. */
+        inline juce::Colour headerText() { return colour (Role::headerText); }
+
+        //======================================================================
+        // The graph, as far as every plugin in the house has one: a ruler and the
+        // captions on it. What is *drawn* on the graph -- curves, bands, whatever this
+        // plugin plots -- is the plugin's own, in PluginTheme.h.
+
+        /** Axis captions and the frequency ruler. */
+        inline juce::Colour graphText() { return colour (Role::graphText); }
+
+        /** Grid lines. Barely there on purpose -- they are a ruler you read against,
+            not part of the picture. */
+        inline juce::Colour grid() { return colour (Role::grid); }
+
+        //======================================================================
+        // Controls. What you press, drag and hover, wherever it happens to stand.
 
         /** What a button is filled with -- text buttons, icon buttons, and a dropdown,
             which is a button that opens a menu.
@@ -70,21 +99,47 @@ namespace Celine
             without moving the canvas with it. */
         inline juce::Colour field() { return colour (Role::field); }
 
-        /** Borders. */
-        inline juce::Colour line() { return colour (Role::line); }
+        /** The dark slate a control is built from: the popup's body, the tooltip, and
+            anything else that is a surface rather than a thing you press. */
+        inline juce::Colour surface() { return colour (Role::surface); }
 
-        /** The graph's ground, darker than anything else so it reads as a hole. */
-        inline juce::Colour consoleBackground() { return colour (Role::consoleBackground); }
+        /** Hover and selection, a step up from surface. */
+        inline juce::Colour surfaceBright() { return colour (Role::surfaceBright); }
 
-        /** A row in a list. */
-        inline juce::Colour pill() { return colour (Role::pill); }
+        /** The unfilled part of a knob's ring and of a slider's track. */
+        inline juce::Colour track() { return colour (Role::track); }
 
-        /** Grid lines. Barely there on purpose -- they are a ruler you read against,
-            not part of the picture. */
-        inline juce::Colour grid() { return colour (Role::grid); }
+        /** The cap of a knob and the grip of a slider: the thing your hand goes to.
+
+            Its own role rather than panel(), which it used to be. The two ship at the
+            same near-white, but one is a ground you read dark ink off and the other is
+            a small bright object you reach for, and a theme that could not tell them
+            apart could not darken its panels without the knobs going with them. */
+        inline juce::Colour handle() { return colour (Role::handle); }
+
+        /** The same grip where it stands on a light panel, in dark ink for the same
+            reason textOnPanel() exists: the near-white one is invisible there. Two
+            roles rather than one because the design has two halves, and a grip has to
+            be findable on both. */
+        inline juce::Colour handleOnPanel() { return colour (Role::handleOnPanel); }
+
+        /** The glyph inside a toolbar or panel button, at rest.
+
+            Its own role rather than textDim(), which it used to be. An icon is not a
+            label: it is the whole of what the button says, and the roles that carry
+            the words in this window are read at a size where a step of grey means
+            something different. Dimming the idle text used to take every icon in the
+            toolbar with it. */
+        inline juce::Colour icon() { return colour (Role::icon); }
+
+        /** The same glyph while the button is hovered, held, or lit. */
+        inline juce::Colour iconLit() { return colour (Role::iconLit); }
 
         //======================================================================
-        // Text. Two families, because of the two-tone split above.
+        // Text. Two families, because of the two-tone split described above: ink on the
+        // dark chrome, and ink on the light panels. Kept out of the area groups on
+        // purpose -- these are used by controls standing on both halves, so filing them
+        // under one area would be wrong the first time somebody changed it.
 
         /** On chrome. Céline White -- the same value the light panels are, because the
             ink on the dark half of the design and the ground on the light half are one
@@ -107,31 +162,38 @@ namespace Celine
         inline juce::Colour textOnPanel() { return colour (Role::textOnPanel); }
 
         //======================================================================
+        // Panels. The two grounds a panel can have, one for each half of the design.
+
+        /** The dark ground a popup is built on -- the About sheet, the export sheet,
+            this editor. Named for the chrome it matches rather than for the header,
+            which has had its own colour since the band and the popups stopped having
+            to agree. */
+        inline juce::Colour chrome() { return colour (Role::chrome); }
+
+        /** The light panels: the design's other half, where the ink flips to
+            textOnPanel(). */
+        inline juce::Colour panel() { return colour (Role::panel); }
+
+        //======================================================================
         // Accents.
 
-        inline juce::Colour teal() { return colour (Role::teal); }
-        inline juce::Colour violet() { return colour (Role::violet); }
-
         /** The primary accent: whatever the plugin is doing to the signal. Every filled
-            control uses this, so changing it here re-skins the plugin. */
+            control uses this, so changing it here re-skins the plugin.
+
+            It is also what a control in force is filled with -- a button that is on, a
+            switch thrown, an icon lit. That used to be a role of its own, and it was
+            reachable in neither plugin: every button that lights up says which colour
+            to light up in, so the role sat in the editor doing nothing. */
         inline juce::Colour accent() { return colour (Role::accent); }
 
-        /** A second accent, for when one curve or channel has to be told apart from
-            another. Sits opposite the primary on the wheel. */
-        inline juce::Colour accentAlt() { return colour (Role::accentAlt); }
+        //======================================================================
+        // States.
 
         /** Anything live and committing. */
         inline juce::Colour record() { return colour (Role::record); }
 
-        /** The unfilled part of a knob's ring and of the cut slider's track. */
-        inline juce::Colour track() { return colour (Role::track); }
-
-        /** A control that is armed or in force. */
-        inline juce::Colour toolActive() { return colour (Role::toolActive); }
-
-        inline juce::Colour danger()  { return colour (Role::danger); }
-        inline juce::Colour warning() { return colour (Role::warning); }
-        inline juce::Colour error()   { return colour (Role::error); }
+        inline juce::Colour danger() { return colour (Role::danger); }
+        inline juce::Colour error()  { return colour (Role::error); }
 
         // This plugin's own colours, if it has any, are declared in PluginTheme.h and
         // included at the end of this namespace -- the same extension point

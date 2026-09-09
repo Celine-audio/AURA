@@ -4,6 +4,8 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <ui/SpectrumDisplay.h>
+#include <ui/Theme.h>
+#include <ui/ThemePalette.h>
 
 namespace
 {
@@ -133,4 +135,49 @@ TEST_CASE ("The band edges cannot be dragged past each other", "[ui]")
 
     CHECK (low <= high);
     CHECK_THAT (low, Catch::Matchers::WithinRel (high, 0.001f));
+}
+
+TEST_CASE ("Both ends outside the band are veiled, and by the same role", "[ui]")
+{
+    // The two rectangles are drawn by separate branches, and for a while they were
+    // painted with separate colours: the low end followed graphShade() and the high end
+    // was still on chrome(), left behind when the graph's furniture was given roles of
+    // its own. Nothing looked wrong -- the two ship at the same value -- until somebody
+    // moved "Outside the band" in the theme editor and only the left end followed,
+    // which reads as the control not working rather than as half of it working.
+    using namespace Celine::Theme;
+
+    const struct Restore { ~Restore() { Celine::Theme::palette().reset(); } } restore;
+
+    SpectrumDisplay display;
+    display.setBounds (0, 0, 1000, 400);
+    display.setView (SpectrumDisplay::View::eqCurve);
+    display.setBand (200.0f, 4000.0f);
+
+    palette().set (Role::graphShade, juce::Colour (0xffff00ff));
+    palette().sendSynchronousChangeMessage();
+
+    const auto shot = display.createComponentSnapshot (display.getLocalBounds(), false, 1.0f);
+
+    // The veil goes on at 0.55 alpha over whatever is behind it, so look for the tint
+    // rather than for the colour: red and blue well up, green left behind.
+    const auto veiled = [] (juce::Colour c)
+    {
+        return c.getRed() > 90 && c.getBlue() > 90 && c.getGreen() < 60;
+    };
+
+    int below = 0, above = 0;
+    {
+        const juce::Image::BitmapData data (shot, juce::Image::BitmapData::readOnly);
+
+        for (int y = 0; y < shot.getHeight(); ++y)
+            for (int x = 0; x < shot.getWidth(); ++x)
+                if (veiled (data.getPixelColour (x, y)))
+                    (x < shot.getWidth() / 2 ? below : above) += 1;
+    }
+
+    INFO ("veiled pixels below the band: " << below << ", above it: " << above);
+
+    CHECK (below > 0);
+    CHECK (above > 0);
 }

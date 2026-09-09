@@ -87,7 +87,7 @@ namespace Celine
 
             if (active)
             {
-                g.setColour (activeColour.value_or (Theme::toolActive()));
+                g.setColour (activeColour.value_or (Theme::accent()));
                 g.fillRoundedRectangle (bounds, Theme::cornerRadius);
             }
             else if (drawsFrame)
@@ -111,8 +111,8 @@ namespace Celine
 
             auto drawn = icon->createCopy();
 
-            const auto idle = iconColour.has_value() ? *iconColour : Theme::textDim();
-            const auto lit = iconColour.has_value() ? iconColour->brighter (0.3f) : Theme::text();
+            const auto idle = iconColour.has_value() ? *iconColour : Theme::icon();
+            const auto lit = iconColour.has_value() ? iconColour->brighter (0.3f) : Theme::iconLit();
 
             Assets::tint (*drawn, ! usable                        ? Theme::textDisabled()
                                   : active || highlighted || down ? lit

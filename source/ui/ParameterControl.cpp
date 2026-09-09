@@ -231,14 +231,14 @@ void SliderRowControl::applyColours()
     if (onDark)
     {
         slider.setColour (juce::Slider::backgroundColourId, Theme::surface());
-        slider.setColour (juce::Slider::thumbColourId, Theme::text());
+        slider.setColour (juce::Slider::thumbColourId, Theme::handle());
         slider.setColour (juce::Slider::textBoxTextColourId, Theme::text());
         rowName.setColour (juce::Label::textColourId, Theme::textDim());
     }
     else
     {
         slider.setColour (juce::Slider::backgroundColourId, Theme::background());
-        slider.setColour (juce::Slider::thumbColourId, Theme::textOnPanel());
+        slider.setColour (juce::Slider::thumbColourId, Theme::handleOnPanel());
         slider.setColour (juce::Slider::textBoxTextColourId, Theme::textOnPanel());
         rowName.setColour (juce::Label::textColourId, Theme::textOnPanel());
     }

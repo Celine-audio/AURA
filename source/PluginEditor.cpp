@@ -460,12 +460,12 @@ void PluginEditor::applyColours()
     logo = Celine::Assets::drawable ("logo.svg");
 
     if (logo != nullptr)
-        Celine::Assets::tint (*logo, Theme::text());
+        Celine::Assets::tint (*logo, Theme::headerText());
 
     wordmark = Celine::Assets::drawable (ProductInfo::wordmarkAsset, Celine::Assets::IfMissing::returnNull);
 
     if (wordmark != nullptr)
-        Celine::Assets::tint (*wordmark, Theme::text());
+        Celine::Assets::tint (*wordmark, Theme::headerText());
 }
 
 void PluginEditor::changeListenerCallback (juce::ChangeBroadcaster*)
@@ -582,7 +582,7 @@ void PluginEditor::paint (juce::Graphics& g)
     // the two faders and the graph — read as openings rather than as boxes.
     g.fillAll (Theme::consoleBackground());
 
-    g.setColour (Theme::chrome());
+    g.setColour (Theme::headerBackground());
     g.fillRect (toolbarBand);
 
     // The faders stand on the surround itself rather than on a ground of their own.

@@ -13,6 +13,10 @@ namespace
     constexpr int irLength = (1 << spectrumFftOrder) * 2;
     constexpr int numBins = (1 << spectrumFftOrder) / 2 + 1;
 
+    // The size the minimum-phase build works at: nextPowerOfTwo (irLength * 4),
+    // four times the response it keeps. 32768 points, so order 15.
+    constexpr int minimumPhaseFftOrder = spectrumFftOrder + 3;
+
     std::vector<float> aCurve()
     {
         std::vector<float> mag ((size_t) numBins);
@@ -64,25 +68,42 @@ TEST_CASE ("A kept builder returns exactly what a thrown-away one did", "[irbuil
 
 TEST_CASE ("Keeping the transform is most of what a rebuild costs", "[irbuilder]")
 {
-    // Constructing the FFT the minimum-phase build works at is a vDSP setup for 32768
-    // points, and it costs around fifteen milliseconds -- against a fifth of one for
-    // the three transforms it is built to perform. Making one per call, which is what
-    // the free functions do, put a stereo rebuild at about thirty milliseconds of
-    // message-thread time, every 120 ms for as long as a drag lasted.
+    // Constructing the FFT the minimum-phase build works at costs whatever the
+    // platform's engine charges for a setup. vDSP precomputes twiddle tables for
+    // 32768 points and wants around fifteen milliseconds for them -- against a
+    // single millisecond for the three transforms the build performs -- so keeping
+    // the transform is nearly the whole saving, and making one per call put a
+    // stereo rebuild at about thirty milliseconds of message-thread time, every
+    // 120 ms for as long as a drag lasted.
     //
-    // Measured as a ratio rather than against a wall-clock figure, because both halves
-    // run on the same machine in the same run: a slow machine moves both. The margin
-    // is wide -- fifteen times was measured, four is asserted -- so this fails when
-    // somebody puts the construction back inside the build, and not otherwise.
+    // Not every engine charges that. One that allocates a table instead of filling
+    // it in -- IPP, or JUCE's own fallback, which is what the Windows and Linux
+    // builds get -- makes a setup nearly free, and there the ratio carries no
+    // signal at all: the same correct code measures about 1.1 rather than 15.
+    //
+    // So the setup is timed rather than assumed. The wide margin is asserted only
+    // where a setup really is most of a build, which is where it can detect
+    // anything; everywhere else the assertion is the part that holds on any engine
+    // -- keeping a transform is never slower than making one every time.
+    //
+    // Measured as a ratio rather than against a wall-clock figure, because both
+    // halves run on the same machine in the same run: a slow machine moves both.
     const auto mag = aCurve();
 
     FilterDesigner::IrBuilder builder;
 
-    const auto made = millisecondsPerCall (8, [&] { auto ir = FilterDesigner::buildMinimumPhaseIR (mag, irLength); (void) ir.size(); });
-    const auto kept = millisecondsPerCall (8, [&] { auto ir = builder.buildMinimumPhase (mag, irLength); (void) ir.size(); });
+    const auto made  = millisecondsPerCall (8, [&] { auto ir = FilterDesigner::buildMinimumPhaseIR (mag, irLength); (void) ir.size(); });
+    const auto kept  = millisecondsPerCall (8, [&] { auto ir = builder.buildMinimumPhase (mag, irLength); (void) ir.size(); });
+    const auto setup = millisecondsPerCall (8, []  { juce::dsp::FFT fft (minimumPhaseFftOrder); (void) fft.getSize(); });
 
-    INFO ("made per call: " << made << " ms, kept: " << kept << " ms");
-    CHECK (kept * 4.0 < made);
+    INFO ("made per call: " << made << " ms, kept: " << kept << " ms, setup: " << setup << " ms");
+
+    // The margin is for measurement noise, not for a regression: eight reps of a
+    // few milliseconds on a loaded CI runner move by more than a clean percent.
+    CHECK (kept < made * 1.25);
+
+    if (setup > made * 0.5)
+        CHECK (kept * 4.0 < made);
 }
 
 TEST_CASE ("Linked channels are convolved with the same response", "[irbuilder]")

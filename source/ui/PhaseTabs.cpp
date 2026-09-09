@@ -228,7 +228,13 @@ void PhaseTab::paint (juce::Graphics& g)
     g.setFont (Fonts::bold (14.0f));
     g.drawText (title, content.removeFromTop (14.0f), juce::Justification::centredLeft);
 
-    g.setColour (hasData ? Theme::textDim() : Theme::textDim().withAlpha (0.6f));
+    // A step below the title, and it follows the title down: the line under a tab you
+    // are not on used to stay exactly as bright as the line under the one you are,
+    // which read as the two tabs being equally in front. Its own role below the
+    // title's, so a theme can separate them.
+    const auto statusInk = selected ? Theme::textDim() : Theme::comment();
+
+    g.setColour (hasData ? statusInk : statusInk.withAlpha (0.6f));
     g.setFont (Fonts::light (11.5f));
     g.drawText (status, content, juce::Justification::topLeft);
 }
