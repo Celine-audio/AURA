@@ -35,7 +35,8 @@ namespace Celine
             label, a hex and a swatch, and nothing is gained by pulling them apart. The
             height is free, because the rows scroll and a taller window is simply more
             of them at once. */
-        enum { fixedWidth = 600, minimumHeight = 560, maximumHeight = 1600 };
+        enum { fixedWidth = 600, defaultHeight = 780,
+               minimumHeight = 560, maximumHeight = 1600 };
 
         void paint (juce::Graphics&) override;
         void resized() override;

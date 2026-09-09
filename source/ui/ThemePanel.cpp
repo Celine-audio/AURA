@@ -194,7 +194,7 @@ ThemePanel::ThemePanel()
 
     // Last, and it matters: setSize fires resized(), which lays out rows that have to
     // exist by then. See the house conventions.
-    setSize (ThemePanel::fixedWidth, 780);
+    setSize (ThemePanel::fixedWidth, ThemePanel::defaultHeight);
 }
 
 ThemePanel::~ThemePanel()

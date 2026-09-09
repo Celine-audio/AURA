@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PlotGeometry.h"
+#include "Theme.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -127,6 +128,11 @@ public:
         translation unit, and nothing orders the two. Whenever the link order put
         these first they copied a default-constructed Colour — opaque black — and the
         entire graph and tab bar drew in greys. */
+    /** Which curve a view is about. Its *role* rather than its colour, so a caller
+        that has to hold on to it -- the tab row does -- holds something that is still
+        right after a theme change. */
+    static Celine::Theme::Role roleFor (View);
+
     static juce::Colour colourFor (View);
 
 private:

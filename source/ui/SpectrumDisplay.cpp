@@ -37,16 +37,21 @@ SpectrumDisplay::SpectrumDisplay()
     setOpaque (true);
 }
 
-juce::Colour SpectrumDisplay::colourFor (View v)
+Theme::Role SpectrumDisplay::roleFor (View v)
 {
     switch (v)
     {
-        case View::current:   return Theme::current();
-        case View::reference: return Theme::reference();
-        case View::eqCurve:   return Theme::correction();
+        case View::current:   return Theme::Role::current;
+        case View::reference: return Theme::Role::reference;
+        case View::eqCurve:   return Theme::Role::correction;
     }
 
-    return Theme::current();
+    return Theme::Role::current;
+}
+
+juce::Colour SpectrumDisplay::colourFor (View v)
+{
+    return Theme::colour (roleFor (v));
 }
 
 void SpectrumDisplay::setView (View newView)

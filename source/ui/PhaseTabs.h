@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Theme.h"
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <array>
@@ -20,7 +22,7 @@ public:
     /** armsCapture separates the two kinds of action button: a Learn arms a capture,
         so it reads red while it runs, whereas Match commits one and reads as done. */
     PhaseTab (const juce::String& tabTitle, const juce::String& actionText,
-              juce::Colour tabAccent, bool armsCapture);
+              Celine::Theme::Role tabAccent, bool armsCapture);
 
     /** Selecting a tab is what puts its curve on screen. */
     void setSelected (bool shouldBeSelected);
@@ -75,7 +77,15 @@ private:
     juce::Path separator;
 
     juce::String title, status;
-    juce::Colour accent;
+
+    /** The stage's own colour, held as the role rather than as the colour. It was the
+        colour once, taken in the constructor, which meant the selected tab's fill and
+        the state dot were the two things in this window a theme change could not
+        reach -- and neither is caught by the reach test, because one is a blend and
+        the other only appears once a stage holds data. */
+    const Celine::Theme::Role accentRole;
+    juce::Colour accent() const { return Celine::Theme::colour (accentRole); }
+
     juce::TextButton action;
     const bool arms;
 

@@ -16,8 +16,8 @@ namespace
 
 //==============================================================================
 PhaseTab::PhaseTab (const juce::String& tabTitle, const juce::String& actionText,
-                    juce::Colour tabAccent, bool armsCapture)
-    : title (tabTitle), accent (tabAccent), action (actionText), arms (armsCapture)
+                    Theme::Role tabAccent, bool armsCapture)
+    : title (tabTitle), accentRole (tabAccent), action (actionText), arms (armsCapture)
 {
     applyColours();
 
@@ -183,7 +183,7 @@ bool PhaseTab::hitTest (int x, int y)
 
 void PhaseTab::paint (juce::Graphics& g)
 {
-    auto fill = selected ? accent.withAlpha (0.20f) : Theme::surface();
+    auto fill = selected ? accent().withAlpha (0.20f) : Theme::surface();
     if (hovered && ! selected)
         fill = fill.brighter (0.07f);
 
@@ -213,7 +213,7 @@ void PhaseTab::paint (juce::Graphics& g)
     }
     else if (hasData)
     {
-        g.setColour (accent);
+        g.setColour (accent());
         g.fillEllipse (dot);
     }
     else
@@ -273,9 +273,9 @@ void PhaseTab::mouseExit (const juce::MouseEvent&)
 //==============================================================================
 PhaseTabBar::PhaseTabBar()
 {
-    tabs[(size_t) current]   = std::make_unique<PhaseTab> ("Current",   "Learn", SpectrumDisplay::colourFor (SpectrumDisplay::View::current),   true);
-    tabs[(size_t) reference] = std::make_unique<PhaseTab> ("Reference", "Learn", SpectrumDisplay::colourFor (SpectrumDisplay::View::reference), true);
-    tabs[(size_t) eqCurve]   = std::make_unique<PhaseTab> ("EQ Curve",  "Match", SpectrumDisplay::colourFor (SpectrumDisplay::View::eqCurve),  false);
+    tabs[(size_t) current]   = std::make_unique<PhaseTab> ("Current",   "Learn", SpectrumDisplay::roleFor (SpectrumDisplay::View::current),   true);
+    tabs[(size_t) reference] = std::make_unique<PhaseTab> ("Reference", "Learn", SpectrumDisplay::roleFor (SpectrumDisplay::View::reference), true);
+    tabs[(size_t) eqCurve]   = std::make_unique<PhaseTab> ("EQ Curve",  "Match", SpectrumDisplay::roleFor (SpectrumDisplay::View::eqCurve),  false);
 
     for (int i = 0; i < numStages; ++i)
     {
