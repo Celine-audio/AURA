@@ -8,6 +8,10 @@
 #include <limits>
 #include <new>
 
+#if JUCE_WINDOWS
+ #include <malloc.h>
+#endif
+
 /*
     What the audio thread is and is not allowed to do.
 
@@ -47,6 +51,33 @@ namespace
     constexpr int blockSize = 512;
 }
 
+//==============================================================================
+namespace
+{
+    // Over-aligned allocation is the one part of this with no portable spelling.
+    // posix_memalign does not exist on Windows, and the memory _aligned_malloc returns
+    // there must go back through _aligned_free rather than free -- handing it to the
+    // ordinary one is heap corruption rather than a diagnostic.
+    void* alignedAllocate (std::size_t bytes, std::size_t alignment)
+    {
+       #if JUCE_WINDOWS
+        return _aligned_malloc (bytes, alignment);
+       #else
+        void* p = nullptr;
+        return posix_memalign (&p, alignment, bytes) == 0 ? p : nullptr;
+       #endif
+    }
+
+    void alignedRelease (void* p) noexcept
+    {
+       #if JUCE_WINDOWS
+        _aligned_free (p);
+       #else
+        std::free (p);
+       #endif
+    }
+}
+
 // Replacing these is a link-time swap, so it catches every allocation in the process --
 // JUCE's, the standard library's and ours alike -- rather than only the ones written in
 // this file. The aligned forms are replaced too: JUCE's SIMD types are over-aligned, and
@@ -67,13 +98,11 @@ void* operator new (std::size_t size, std::align_val_t alignment)
 {
     note();
 
-    void* p = nullptr;
+    if (auto* p = alignedAllocate (size == 0 ? 1 : size,
+                                   juce::jmax (sizeof (void*), (std::size_t) alignment)))
+        return p;
 
-    if (posix_memalign (&p, juce::jmax (sizeof (void*), (std::size_t) alignment),
-                        size == 0 ? 1 : size) != 0)
-        throw std::bad_alloc();
-
-    return p;
+    throw std::bad_alloc();
 }
 
 void* operator new[] (std::size_t size, std::align_val_t alignment)
@@ -85,10 +114,10 @@ void operator delete (void* p) noexcept { std::free (p); }
 void operator delete[] (void* p) noexcept { std::free (p); }
 void operator delete (void* p, std::size_t) noexcept { std::free (p); }
 void operator delete[] (void* p, std::size_t) noexcept { std::free (p); }
-void operator delete (void* p, std::align_val_t) noexcept { std::free (p); }
-void operator delete[] (void* p, std::align_val_t) noexcept { std::free (p); }
-void operator delete (void* p, std::size_t, std::align_val_t) noexcept { std::free (p); }
-void operator delete[] (void* p, std::size_t, std::align_val_t) noexcept { std::free (p); }
+void operator delete (void* p, std::align_val_t) noexcept { alignedRelease (p); }
+void operator delete[] (void* p, std::align_val_t) noexcept { alignedRelease (p); }
+void operator delete (void* p, std::size_t, std::align_val_t) noexcept { alignedRelease (p); }
+void operator delete[] (void* p, std::size_t, std::align_val_t) noexcept { alignedRelease (p); }
 
 //==============================================================================
 namespace
