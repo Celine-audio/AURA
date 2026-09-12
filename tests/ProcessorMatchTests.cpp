@@ -740,3 +740,52 @@ TEST_CASE ("Match stays offered while a side is re-learned", "[processor]")
     CHECK (plugin.performMatch());
     CHECK_FALSE (plugin.isMatchStale());
 }
+
+TEST_CASE ("Re-preparing does not drop the correction for a moment", "[processor]")
+{
+    // A host calls prepareToPlay on every transport start and every change of rate or
+    // buffer size, with the match still made. Anything in the engine that snaps a
+    // crossfade to zero there plays the uncorrected signal until it has walked back --
+    // which is the first note of every take. GALLERY had exactly this bug in its wet
+    // mix; this is the assertion that says AURA does not.
+    PluginProcessor plugin;
+    captureAsymmetricMatch (plugin);
+
+    juce::AudioBuffer<float> buffer (2, blockSize);
+    juce::MidiBuffer midi;
+
+    const auto impulsePeak = [&]
+    {
+        // Settled first: the engine walks to a new filter over about 40 ms, so an
+        // impulse sent before that lands measures the walk rather than the filter.
+        for (int block = 0; block < 32; ++block)
+        {
+            buffer.clear();
+            plugin.processBlock (buffer, midi);
+        }
+
+        buffer.clear();
+        buffer.setSample (0, 0, 1.0f);
+        buffer.setSample (1, 0, 1.0f);
+        plugin.processBlock (buffer, midi);
+
+        return buffer.getMagnitude (0, 0, buffer.getNumSamples());
+    };
+
+    const auto settled = impulsePeak();
+    REQUIRE (settled > 0.0f);
+
+    plugin.prepareToPlay (sampleRate, blockSize);
+
+    buffer.clear();
+    buffer.setSample (0, 0, 1.0f);
+    buffer.setSample (1, 0, 1.0f);
+    plugin.processBlock (buffer, midi);
+
+    const auto firstPeak = buffer.getMagnitude (0, 0, buffer.getNumSamples());
+
+    INFO ("settled " << settled << ", first block after re-prepare " << firstPeak);
+
+    // An unprocessed impulse comes back at 1.0; a corrected one does not.
+    CHECK (firstPeak < juce::jmax (settled * 1.25f, 0.9f));
+}
