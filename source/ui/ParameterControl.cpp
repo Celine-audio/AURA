@@ -133,13 +133,19 @@ void ParameterControl::Slider::colourChanged()
     refreshTextBoxColours();
 }
 
+void ParameterControl::setFillRole (Theme::Role role)
+{
+    fillRole = role;
+    applyColours();
+}
+
 void ParameterControl::applyColours()
 {
     nameLabel.setColour (juce::Label::textColourId, Theme::textDim());
 
     slider.setColour (juce::Slider::textBoxTextColourId, Theme::text());
     slider.setColour (juce::Slider::textBoxHighlightColourId, Theme::accent().withAlpha (0.3f));
-    slider.setColour (juce::Slider::rotarySliderFillColourId, Theme::accent());
+    slider.setColour (juce::Slider::rotarySliderFillColourId, Theme::colour (fillRole));
     slider.setColour (juce::Slider::rotarySliderOutlineColourId, Theme::line());
 
     slider.refreshTextBoxColours();

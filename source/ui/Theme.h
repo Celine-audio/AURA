@@ -66,10 +66,14 @@ namespace Celine
         /** The toolbar band itself. */
         inline juce::Colour headerBackground() { return colour (Role::headerBackground); }
 
-        /** The logo and the wordmark, which are tinted rather than drawn -- so this is
-            the one colour that is the brand rather than the interface. Its own role
-            because the mark is the last thing most themes want to restyle, and until
-            now it followed text() and moved whenever any label did. */
+        /** Every white mark in the chrome: the logo, the wordmark, and the glyph in an
+            icon button. All three are artwork tinted rather than text drawn, all three
+            stand on the dark chrome, and they are meant to look like one another -- so
+            they are one colour rather than two that have to be set to the same value.
+
+            Its own role rather than text(), which the marks followed until recently:
+            these are the brand rather than the interface, and the last thing most themes
+            want moved when a label moves. */
         inline juce::Colour headerText() { return colour (Role::headerText); }
 
         //======================================================================
@@ -121,18 +125,6 @@ namespace Celine
             a small bright object you reach for, and a theme that could not tell them
             apart could not darken its panels without the knobs going with them. */
         inline juce::Colour handle() { return colour (Role::handle); }
-
-        /** The glyph inside a toolbar or panel button, at rest.
-
-            Its own role rather than textDim(), which it used to be. An icon is not a
-            label: it is the whole of what the button says, and the roles that carry
-            the words in this window are read at a size where a step of grey means
-            something different. Dimming the idle text used to take every icon in the
-            toolbar with it. */
-        inline juce::Colour icon() { return colour (Role::icon); }
-
-        /** The same glyph while the button is hovered, held, or lit. */
-        inline juce::Colour iconLit() { return colour (Role::iconLit); }
 
         //======================================================================
         // Text. Two families, because of the two-tone split described above: ink on the
@@ -186,6 +178,24 @@ namespace Celine
         // This plugin's own colours, if it has any, are declared in PluginTheme.h and
         // included at the end of this namespace -- the same extension point
         // PluginThemeRoles.h is for the roles themselves.
+
+        //======================================================================
+        // What a control does under the pointer, which is a rule rather than a colour.
+        //
+        // Stated once because it has to be the same everywhere: a hover that is its own
+        // themeable colour is a second thing to keep in step with the first, and the
+        // two drift the moment somebody changes one. This lifts whatever the control is
+        // already filled with towards the ink, so a button, an icon and a dropdown all
+        // answer the pointer in the same voice whatever they are painted.
+
+        /** `fill`, lifted for a pointer over it and lifted further for one held down. */
+        inline juce::Colour underPointer (juce::Colour fill, bool hovered, bool held)
+        {
+            if (! (hovered || held))
+                return fill;
+
+            return fill.overlaidWith (text().withAlpha (held ? 0.16f : 0.08f));
+        }
 
         //======================================================================
         // Geometry the mockup is consistent about, stated once rather than sprinkled

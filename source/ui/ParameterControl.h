@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Theme.h"
+
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -69,6 +71,17 @@ public:
     /** Every colour this takes once rather than reading as it draws. See the note in
         Theme.h: a colour handed to setColour is a snapshot, and a snapshot does not
         follow a theme change unless something hands it back. */
+    /** Which colour fills the travelled part of the arc or track. The plugin's accent
+        unless something says otherwise -- GALLERY's strips say otherwise, because a
+        knob belonging to one cabinet wears that cabinet's colour.
+
+        Given as a *role* rather than a colour, and kept, for the reason every override
+        in this house is: applyColours() runs again on every theme change and on every
+        lookAndFeelChanged(), so a colour written in from outside is overwritten the
+        next time either happens. That is not hypothetical -- it is exactly what put
+        the four strips' knobs back on the accent. */
+    void setFillRole (Celine::Theme::Role role);
+
     virtual void applyColours();
 
     /** Pushes the slider's text-box colours onto the box itself, which copied them when
@@ -79,6 +92,9 @@ public:
     void resized() override;
 
 protected:
+    /** Which role fills the travelled part of the arc or track -- see setFillRole. */
+    Celine::Theme::Role fillRole = Celine::Theme::Role::accent;
+
     /** The area left for the slider once the name has taken its row. */
     virtual void layOutSlider (juce::Rectangle<int> area) { slider.setBounds (area); }
 

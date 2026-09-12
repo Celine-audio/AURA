@@ -386,10 +386,8 @@ void LookAndFeelBase::drawButtonBackground (juce::Graphics& g, juce::Button& but
 {
     const auto bounds = button.getLocalBounds().toFloat().reduced (Theme::borderWidth * 0.5f);
 
-    auto fill = backgroundColour;
-
-    if (shouldDrawButtonAsDown || shouldDrawButtonAsHighlighted)
-        fill = fill.overlaidWith (Theme::text().withAlpha (shouldDrawButtonAsDown ? 0.16f : 0.08f));
+    auto fill = Theme::underPointer (backgroundColour, shouldDrawButtonAsHighlighted,
+                                     shouldDrawButtonAsDown);
 
     if (! button.isEnabled())
         fill = fill.withMultipliedAlpha (0.5f);

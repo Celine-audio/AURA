@@ -54,7 +54,7 @@
     X (line,              "Border",              "Window",   0xffd9d9d9)                \
                                                                                         \
     X (headerBackground,  "Header band",         "Header",   0xff3b334b)                \
-    X (headerText,        "Logo and wordmark",   "Header",   0xfff9fbff)                \
+    X (headerText,        "Logo and icons",      "Header",   0xfff9fbff)                \
                                                                                         \
     X (graphText,         "Labels",              "Graph",    0xffb5b3c4)                \
     X (grid,              "Grid line",           "Graph",    0xff5c5c5c)                \
@@ -65,8 +65,6 @@
     X (surfaceBright,     "Hover and selection", "Controls", 0xff4f485d)                \
     X (track,             "Unfilled track",      "Controls", 0xff565656)                \
     X (handle,            "Knob cap and grip",   "Controls", 0xfff9fbff)                \
-    X (icon,              "Icon",                "Controls", 0xffd9d9d9)                \
-    X (iconLit,           "Icon, lit",           "Controls", 0xfff9fbff)                \
                                                                                         \
     X (text,              "Text",                "Text",     0xfff9fbff)                \
     X (textDim,           "Text, idle",          "Text",     0xffd9d9d9)                \
