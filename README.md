@@ -23,7 +23,7 @@ builds a linear-phase EQ curve that tries to replicate the audio signature of th
 ## Formats
 
 Built as **VST3®**, **AU** (macOS), **LV2** and **CLAP**, on Windows, macOS, and
-Linux, plus **AAX** on Windows and macOS.
+Linux, plus **AAX** on Windows and macOS. Minimum macOS requirements is 11, Big Sur.
 
 The AAX build is still waiting for approval from AVID, so it will not work in consumer versions as of now.
 Nothing is code-signed, so Gatekeeper and SmartScreen will warn on first run.

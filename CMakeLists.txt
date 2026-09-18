@@ -10,6 +10,9 @@ include (CPM)
 # Configures universal binaries and decides which version of macOS to support
 include(PamplejuceMacOS)
 
+# Raised from the 10.14 the shared cmake module asks for. This is following the release of macOS 27 Golden Gate
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Support macOS down to Big Sur" FORCE)
+
 # Couple tweaks that IMO should be JUCE defaults
 include(JUCEDefaults)
 

@@ -56,6 +56,20 @@ namespace Celine
             Off for a button that sits inside something already drawn as its frame --
             Céline's undo and redo share one housing painted behind the pair. Such a
             button shows only its hover, inset so it stays within that housing. */
+        /** Which role fills the button when it is framed. Button unless told otherwise
+            -- and told otherwise where a button stands on a surface of its own, so that
+            re-slating one group of controls does not reach every button in the window.
+
+            A role rather than a colour, for the reason every override in this house is
+            one: paintButton runs again on every theme change and reads this afresh, so
+            a colour handed in from outside would be painted over the first time the
+            palette moved. */
+        void setFillRole (Theme::Role role)
+        {
+            fillRole = role;
+            repaint();
+        }
+
         void setDrawsFrame (bool shouldDraw)
         {
             drawsFrame = shouldDraw;
@@ -93,7 +107,7 @@ namespace Celine
             if (active || drawsFrame)
             {
                 const auto base = active ? activeColour.value_or (Theme::accent())
-                                         : Theme::button();
+                                         : Theme::colour (fillRole);
 
                 g.setColour (Theme::underPointer (base, highlighted, down));
                 g.fillRoundedRectangle (bounds, Theme::cornerRadius);
@@ -150,6 +164,7 @@ namespace Celine
         std::optional<juce::Colour> activeColour;
         std::optional<juce::Colour> iconColour;
         bool active = false;
+        Theme::Role fillRole = Theme::Role::button;
         bool drawsFrame = true;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IconButton)

@@ -59,7 +59,7 @@
     X (graphText,         "Labels",              "Graph",    0xffb5b3c4)                \
     X (grid,              "Grid line",           "Graph",    0xff5c5c5c)                \
                                                                                         \
-    X (button,            "Button",              "Controls", 0xff37364a)                \
+    X (button,            "Button",              "Controls", 0xff474660)                \
     X (field,             "Text field",          "Controls", 0xff28262e)                \
     X (surface,           "Control",             "Controls", 0xff37364a)                \
     X (surfaceBright,     "Hover and selection", "Controls", 0xff4f485d)                \
