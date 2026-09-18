@@ -4,8 +4,8 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <ui/SpectrumDisplay.h>
-#include <ui/Theme.h>
-#include <ui/ThemePalette.h>
+#include <CelineUI/Theme.h>
+#include <CelineUI/ThemePalette.h>
 
 namespace
 {

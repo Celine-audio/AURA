@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ParameterControl.h"
+#include <CelineUI/ParameterControl.h>
 
 /*
     AURA's own, and deliberately not part of the shared kit.

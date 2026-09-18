@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PlotGeometry.h"
-#include "Theme.h"
+#include <CelineUI/Theme.h>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 

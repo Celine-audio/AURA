@@ -1,7 +1,7 @@
 #include "ExportPanel.h"
 
-#include "Fonts.h"
-#include "Theme.h"
+#include <CelineUI/Fonts.h>
+#include <CelineUI/Theme.h>
 
 using namespace Celine;
 
