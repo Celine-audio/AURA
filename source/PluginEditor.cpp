@@ -2,8 +2,8 @@
 
 #include "ProductInfo.h"
 
-#include "ui/EmbeddedAssets.h"
-#include "ui/Fonts.h"
+#include <CelineUI/EmbeddedAssets.h>
+#include <CelineUI/Fonts.h>
 
 #include <cmath>
 

@@ -15,8 +15,8 @@
     out half-themed with nothing to say so.
 */
 #include <ui/PhaseTabs.h>
-#include <ui/Theme.h>
-#include <ui/ThemePalette.h>
+#include <CelineUI/Theme.h>
+#include <CelineUI/ThemePalette.h>
 
 #include <catch2/catch_test_macros.hpp>
 

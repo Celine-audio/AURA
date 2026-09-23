@@ -1,6 +1,6 @@
 #pragma once
 
-#include "LookAndFeelBase.h"
+#include <CelineUI/LookAndFeelBase.h>
 
 /**
     This plugin's look.
