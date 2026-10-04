@@ -167,16 +167,13 @@ namespace FilterDesigner
         }
     }
 
-    float levelDifferenceDb (std::initializer_list<ChannelSpectra> channels,
-                             double sampleRate,
-                             const Params& params)
+    float levelDifferenceDb (std::initializer_list<ChannelSpectra> channels, double sampleRate)
     {
         constexpr float epsilon = 1.0e-9f;
 
-        // The band the correction is confined to is also the band that gets a say in its
-        // level: a frequency the user has excluded should not move the rest.
-        const auto low = std::max ((double) Params::noLowBound, (double) params.lowFreqHz);
-        const auto high = std::min ((double) Params::noHighBound, (double) params.highFreqHz);
+        // The audible range, whatever the band is set to -- see the declaration.
+        constexpr auto low = (double) Params::noLowBound;
+        constexpr auto high = (double) Params::noHighBound;
 
         std::vector<std::pair<float, double>> weighted;
         auto total = 0.0;

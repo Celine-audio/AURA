@@ -320,7 +320,7 @@ MatchEngine::CorrectionCurves MatchEngine::deriveCurves (const Spectra& sourceMa
     auto design = settings.design;
     design.levelOffsetDb = FilterDesigner::levelDifferenceDb ({ { sourceMags[0], referenceMags[0] },
                                                                 { sourceMags[1], referenceMags[1] } },
-                                                              sampleRate, design);
+                                                              sampleRate);
 
     curves.leftDb  = FilterDesigner::computeCorrectionDb (sourceMags[0], referenceMags[0], sampleRate, design);
     curves.rightDb = FilterDesigner::computeCorrectionDb (sourceMags[1], referenceMags[1], sampleRate, design);

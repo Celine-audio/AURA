@@ -52,14 +52,12 @@ namespace
 }
 
 //==============================================================================
-TEST_CASE ("The level difference is the median across the band", "[level]")
+TEST_CASE ("The level difference is the median across the audible range", "[level]")
 {
-    FilterDesigner::Params params;
-
     SECTION ("a flat difference is that difference")
     {
         const auto source = spectrum (0.0f), reference = spectrum (9.0f);
-        CHECK_THAT (FilterDesigner::levelDifferenceDb ({ { source, reference } }, sampleRate, params),
+        CHECK_THAT (FilterDesigner::levelDifferenceDb ({ { source, reference } }, sampleRate),
                     WithinAbs (9.0f, 0.01f));
     }
 
@@ -73,26 +71,58 @@ TEST_CASE ("The level difference is the median across the band", "[level]")
         for (size_t k = binAt (16000.0); k < numBins; ++k)
             reference[k] = 1.0e-7f;
 
-        CHECK_THAT (FilterDesigner::levelDifferenceDb ({ { source, reference } }, sampleRate, params),
+        CHECK_THAT (FilterDesigner::levelDifferenceDb ({ { source, reference } }, sampleRate),
                     WithinAbs (9.0f, 0.01f));
     }
 
-    SECTION ("only the band has a say")
+    SECTION ("what lies outside the audible range has no say")
     {
-        // +9 dB from 200 Hz to 5 kHz, +30 dB outside it.
+        // +9 dB where you can hear it, +40 dB under 20 Hz and over 20 kHz.
         const auto source = spectrum (0.0f);
         auto reference = spectrum (9.0f);
 
         for (size_t k = 0; k < numBins; ++k)
-            if ((double) k * binHz < 200.0 || (double) k * binHz > 5000.0)
-                reference[k] = spectrum (30.0f)[k];
+            if ((double) k * binHz < 20.0 || (double) k * binHz > 20000.0)
+                reference[k] = spectrum (40.0f)[k];
 
-        params.lowFreqHz = 200.0f;
-        params.highFreqHz = 5000.0f;
-
-        CHECK_THAT (FilterDesigner::levelDifferenceDb ({ { source, reference } }, sampleRate, params),
+        CHECK_THAT (FilterDesigner::levelDifferenceDb ({ { source, reference } }, sampleRate),
                     WithinAbs (9.0f, 0.01f));
     }
+}
+
+TEST_CASE ("Moving the band edges leaves the level alone", "[level]")
+{
+    // The edges are dragged while listening, so the level taken out has to hold still
+    // while they move: inside the band, the correction should be exactly what it is with
+    // the band wide open, and only the roll-offs should differ.
+    const auto source = spectrum (0.0f, -3.0f);
+    const MatchEngine::Spectra sources { source, source };
+    const MatchEngine::Spectra references { spectrum (12.0f), spectrum (12.0f) };
+
+    const auto curvesWith = [&] (float lowHz, float highHz)
+    {
+        MatchEngine engine;
+        engine.prepare (sampleRate, 512, 2);
+
+        MatchEngine::Settings settings;
+        settings.design.lowFreqHz = lowHz;
+        settings.design.highFreqHz = highHz;
+        settings.design.smoothingOctaves = 0.0f; // so a bin inside the band is that bin alone
+        engine.setSettings (settings);
+
+        engine.importTake (MatchEngine::Side::source, sources, sampleRate, "source");
+        engine.importTake (MatchEngine::Side::reference, references, sampleRate, "reference");
+        REQUIRE (engine.performMatch());
+
+        return engine.getCorrectionCurves();
+    };
+
+    const auto open = curvesWith (20.0f, 20000.0f);
+    const auto narrow = curvesWith (300.0f, 3000.0f);
+
+    // Well inside the narrow band, a whole octave clear of either roll-off.
+    for (auto k = binAt (600.0); k <= binAt (1500.0); ++k)
+        REQUIRE_THAT (narrow.leftDb[k], WithinAbs (open.leftDb[k], 1.0e-4f));
 }
 
 TEST_CASE ("A louder reference builds the same correction", "[level]")

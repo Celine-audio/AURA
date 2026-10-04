@@ -68,8 +68,14 @@ namespace FilterDesigner
     };
 
     /** How much louder the reference is than the source overall, in dB, pooled across
-        every channel given: the weighted median of the per-bin difference within
-        [params.lowFreqHz, params.highFreqHz].
+        every channel given: the weighted median of the per-bin difference over the
+        audible range, 20 Hz to 20 kHz.
+
+        The whole range rather than the band the correction is confined to, and that is
+        deliberate: the band edges are something you drag while listening, and the level
+        taken out has to hold still while you do. Measured inside the band, every move of
+        an edge moved the whole curve up or down with it. The level difference is a
+        property of the two takes, not of how much of the correction you choose to apply.
 
         Taken off the correction (see Params::levelOffsetDb) so that it matches the two
         takes' tone and not their loudness, the way Logic's Match EQ does. Left in, a
@@ -86,9 +92,7 @@ namespace FilterDesigner
         equal say -- unweighted, the top octave alone holds half the bins. A median rather
         than a mean, because the bins that disagree most say least about level: a
         reference encoded to stop at 16 kHz, a source with nothing under 40 Hz, a hum. */
-    float levelDifferenceDb (std::initializer_list<ChannelSpectra> channels,
-                             double sampleRate,
-                             const Params& params);
+    float levelDifferenceDb (std::initializer_list<ChannelSpectra> channels, double sampleRate);
 
     /** Computes the per-bin correction in dB (referenceMag / sourceMag) less
         params.levelOffsetDb, clamped,
