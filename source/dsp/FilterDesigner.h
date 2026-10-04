@@ -2,6 +2,7 @@
 
 #include <juce_dsp/juce_dsp.h>
 
+#include <initializer_list>
 #include <memory>
 #include <vector>
 
@@ -35,16 +36,11 @@ namespace FilterDesigner
         float maxBoostDb = 24.0f;
         float maxCutDb = 60.0f;
 
-        /** The output trim applied after the filter, in dB.
-
-            The limits above are measured against the response as a whole -- this trim
-            included -- rather than against the correction alone. So a reference far
-            louder than the source still runs the correction into the ceiling, and the
-            shape is lost where it does; but turning the output down lowers the whole
-            response, the clamped stretch comes back under the ceiling, and the shape
-            comes back with it. The difference itself is never thrown away: it is the
-            clamp that moves, not the curve. */
-        float outputGainDb = 0.0f;
+        /** Taken off the raw difference before anything else is done to it, in dB: the
+            overall level difference between the two takes, as levelDifferenceDb()
+            measures it. Zero leaves the curve carrying it. MatchEngine sets it so the
+            correction matches tone rather than loudness -- see levelDifferenceDb. */
+        float levelOffsetDb = 0.0f;
         float smoothingOctaves = 1.0f / 3.0f; // width of the Gaussian window; 0 = no smoothing
         float lowFreqHz = 20.0f;              // correction fades out below this
         float highFreqHz = 20000.0f;          // correction fades out above this
@@ -64,8 +60,39 @@ namespace FilterDesigner
         static constexpr float noHighBound = 20000.0f;
     };
 
-    /** Computes the per-bin correction in dB (referenceMag / sourceMag), amount-scaled,
-        clamped so that it and the output trim together stay inside the limits, smoothed over a fractional-octave Gaussian window and faded
+    /** One channel's source and reference spectra, for levelDifferenceDb(). */
+    struct ChannelSpectra
+    {
+        const std::vector<float>& source;
+        const std::vector<float>& reference;
+    };
+
+    /** How much louder the reference is than the source overall, in dB, pooled across
+        every channel given: the weighted median of the per-bin difference within
+        [params.lowFreqHz, params.highFreqHz].
+
+        Taken off the correction (see Params::levelOffsetDb) so that it matches the two
+        takes' tone and not their loudness, the way Logic's Match EQ does. Left in, a
+        reference 15 dB hotter than the source -- a mastered track against a mix -- was
+        15 dB of gain across the whole curve: it pressed against the boost ceiling, and
+        where the band eases the correction back to 0 dB at its edges it did so down a
+        15 dB slope.
+
+        One figure for all the channels rather than one each, so that a reference whose
+        left side is louder than its right, relative to the source, still asks for that.
+        Only the level they share comes out.
+
+        Weighted by each bin's share of a log-frequency axis, so every octave has an
+        equal say -- unweighted, the top octave alone holds half the bins. A median rather
+        than a mean, because the bins that disagree most say least about level: a
+        reference encoded to stop at 16 kHz, a source with nothing under 40 Hz, a hum. */
+    float levelDifferenceDb (std::initializer_list<ChannelSpectra> channels,
+                             double sampleRate,
+                             const Params& params);
+
+    /** Computes the per-bin correction in dB (referenceMag / sourceMag) less
+        params.levelOffsetDb, clamped,
+        amount-scaled, smoothed over a fractional-octave Gaussian window and faded
         out beyond the band limits.
         sourceMag and referenceMag must be the same length (numBins == fftSize/2 + 1). */
     std::vector<float> computeCorrectionDb (const std::vector<float>& sourceMag,

@@ -167,6 +167,61 @@ namespace FilterDesigner
         }
     }
 
+    float levelDifferenceDb (std::initializer_list<ChannelSpectra> channels,
+                             double sampleRate,
+                             const Params& params)
+    {
+        constexpr float epsilon = 1.0e-9f;
+
+        // The band the correction is confined to is also the band that gets a say in its
+        // level: a frequency the user has excluded should not move the rest.
+        const auto low = std::max ((double) Params::noLowBound, (double) params.lowFreqHz);
+        const auto high = std::min ((double) Params::noHighBound, (double) params.highFreqHz);
+
+        std::vector<std::pair<float, double>> weighted;
+        auto total = 0.0;
+
+        for (const auto& channel : channels)
+        {
+            const auto numBins = std::min (channel.source.size(), channel.reference.size());
+
+            if (numBins < 2)
+                continue;
+
+            const auto binHz = sampleRate / (double) ((numBins - 1) * 2);
+
+            for (size_t k = 1; k < numBins; ++k)
+            {
+                const auto freq = (double) k * binHz;
+
+                if (freq < low || freq > high)
+                    continue;
+
+                const auto weight = binHz / freq;
+                weighted.emplace_back (linToDb ((channel.reference[k] + epsilon) / (channel.source[k] + epsilon)), weight);
+                total += weight;
+            }
+        }
+
+        if (weighted.empty())
+            return 0.0f;
+
+        std::sort (weighted.begin(), weighted.end(),
+                   [] (const auto& a, const auto& b) { return a.first < b.first; });
+
+        auto running = 0.0;
+
+        for (const auto& [db, weight] : weighted)
+        {
+            running += weight;
+
+            if (running >= total * 0.5)
+                return db;
+        }
+
+        return weighted.back().first;
+    }
+
     std::vector<float> computeCorrectionDb (const std::vector<float>& sourceMag,
                                             const std::vector<float>& referenceMag,
                                             double sampleRate,
@@ -180,23 +235,15 @@ namespace FilterDesigner
         // reference, which is how you exaggerate a difference instead of removing it.
         const auto amount = std::clamp (params.amount, -1.0f, 1.0f);
 
-        // The limits bound the response you hear -- correction plus output trim -- so a
-        // bin is held where the two together meet a limit. See Params::outputGainDb: it is
-        // what lets the output fader pull a clamped boost back under the ceiling and
-        // recover its shape. A bin inside the limits is left exactly as it was asked for,
-        // rather than having the trim added and taken off again, so moving the trim
-        // changes nothing at all until something reaches a limit.
-        const auto trim = params.outputGainDb;
-
         for (size_t k = 0; k < numBins; ++k)
         {
             const auto ratio = (referenceMag[k] + epsilon) / (sourceMag[k] + epsilon);
-            const auto wanted = linToDb (ratio) * amount;
-            const auto heard = wanted + trim;
 
-            correctionDb[k] = heard > params.maxBoostDb ? params.maxBoostDb - trim
-                            : heard < -params.maxCutDb  ? -params.maxCutDb - trim
-                                                        : wanted;
+            // The level comes out before the clamp, so the ceiling is measured from where
+            // the curve actually sits rather than from where the loudness put it.
+            auto db = linToDb (ratio) - params.levelOffsetDb;
+            db = std::clamp (db, -params.maxCutDb, params.maxBoostDb);
+            correctionDb[k] = db * amount;
         }
 
         smoothOctaves (correctionDb, sampleRate, params.smoothingOctaves);

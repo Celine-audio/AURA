@@ -313,8 +313,17 @@ MatchEngine::CorrectionCurves MatchEngine::deriveCurves (const Spectra& sourceMa
 {
     CorrectionCurves curves;
 
-    curves.leftDb  = FilterDesigner::computeCorrectionDb (sourceMags[0], referenceMags[0], sampleRate, settings.design);
-    curves.rightDb = FilterDesigner::computeCorrectionDb (sourceMags[1], referenceMags[1], sampleRate, settings.design);
+    // Tone, not loudness: the level the two takes differ by overall comes out of both
+    // channels alike, so the correction is centred on 0 dB and leaves level to the
+    // output fader -- while a reference that leans left, relative to the source, still
+    // gets a left channel that leans with it. See FilterDesigner::levelDifferenceDb.
+    auto design = settings.design;
+    design.levelOffsetDb = FilterDesigner::levelDifferenceDb ({ { sourceMags[0], referenceMags[0] },
+                                                                { sourceMags[1], referenceMags[1] } },
+                                                              sampleRate, design);
+
+    curves.leftDb  = FilterDesigner::computeCorrectionDb (sourceMags[0], referenceMags[0], sampleRate, design);
+    curves.rightDb = FilterDesigner::computeCorrectionDb (sourceMags[1], referenceMags[1], sampleRate, design);
 
     // Link pulls the two channels towards their common average: 1 makes them
     // identical (one shared curve), 0 leaves each channel to its own correction.

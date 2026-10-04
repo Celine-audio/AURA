@@ -20,19 +20,14 @@ namespace ParamID
     inline constexpr auto highFreq   = "highFreq";
     inline constexpr auto phase      = "phase";
 
-    /** Every parameter the filter has to be rebuilt for. Bypass is absent: it just
-        gates the convolution.
-
-        Output gain is here although it is still applied as a ramped trim on the way
-        out, not by the filter. The correction's limits are measured against the whole
-        response, trim included (see FilterDesigner::Params::outputGainDb), so moving
-        the trim moves where the correction is clamped -- which is how turning the
-        output down recovers a boost that ran into the ceiling.
+    /** Every parameter the filter has to be rebuilt for. Output gain is deliberately
+        absent: it is a ramped trim on the way out, not part of the filter. Bypass
+        likewise just gates the convolution.
 
         Phase is here even though it leaves the correction curve untouched — the curve
         is the same either way, only the response realising it differs — because
         re-deriving a curve costs far less than the risk of a second code path. */
-    inline constexpr std::array filterShaping { amount, smoothing, link, lowFreq, highFreq, phase, outputGain };
+    inline constexpr std::array filterShaping { amount, smoothing, link, lowFreq, highFreq, phase };
 }
 
 namespace Parameters
