@@ -225,6 +225,13 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     outputGain.setRampDurationSeconds (0.05);
     outputGain.setGainDecibels (apvts.getRawParameterValue (ParamID::outputGain)->load());
     outputGain.reset();
+
+    // The dry path has to be able to match the longest latency the correction reports,
+    // which is linear phase's half a filter. Started where the bypass already stands, so
+    // a session opened bypassed does not fade out of a correction it never played.
+    bypassFade.prepare (juce::jmax (1, getMainBusNumOutputChannels()), juce::jmax (1, samplesPerBlock),
+                        MatchEngine::irLength / 2, sampleRate);
+    bypassFade.reset (apvts.getRawParameterValue (ParamID::bypass)->load() > 0.5f);
 }
 
 void PluginProcessor::releaseResources()
@@ -354,15 +361,36 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     // --- Apply the matched EQ -------------------------------------------------
     const bool bypassed = apvts.getRawParameterValue (ParamID::bypass)->load() > 0.5f;
 
-    if (! bypassed)
-        engine.process (mainOutput);
+    // Bypass takes the trim out with the EQ, so A/B-ing compares like with like -- by
+    // fading out the signal the trim is part of, not by ramping the trim to unity. The
+    // ramp took 50 ms while the correction left in a sample, and for those 50 ms you
+    // heard the one without the other.
+    outputGain.setGainDecibels (apvts.getRawParameterValue (ParamID::outputGain)->load());
 
-    juce::dsp::AudioBlock<float> block (mainOutput);
-    juce::dsp::ProcessContextReplacing<float> context (block);
+    // The latency the host is compensating for, which the dry path has to match.
+    const auto latency = getLatencySamples();
 
-    // Bypass takes the trim out with the EQ, so A/B-ing compares like with like.
-    outputGain.setGainDecibels (bypassed ? 0.0f : apvts.getRawParameterValue (ParamID::outputGain)->load());
-    outputGain.process (context);
+    // In pieces no larger than the bypass fade was prepared for, should a host send
+    // more than it promised. A buffer referring to the block's own channels allocates
+    // nothing, so this costs only the loop.
+    const auto pieceSize = bypassFade.getMaxBlockSize();
+
+    for (int start = 0; start < numSamples; start += pieceSize)
+    {
+        juce::AudioBuffer<float> piece (mainOutput.getArrayOfWritePointers(), mainOutput.getNumChannels(),
+                                        start, juce::jmin (pieceSize, numSamples - start));
+
+        bypassFade.pushDry (piece, latency);
+
+        // Always, bypassed or not: a convolution that is not fed while bypassed has to
+        // resume from old input, and the step between that and now is the pop.
+        engine.process (piece);
+
+        juce::dsp::AudioBlock<float> block (piece);
+        outputGain.process (juce::dsp::ProcessContextReplacing<float> (block));
+
+        bypassFade.mix (piece, bypassed);
+    }
 
     // --- Live "current" output, sampled post-EQ -------------------------------
     if (live)

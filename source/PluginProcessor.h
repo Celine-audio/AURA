@@ -5,6 +5,7 @@
 
 #include "Parameters.h"
 #include "dsp/AudioFileSpectrum.h"
+#include "dsp/BypassFade.h"
 #include "dsp/IrExport.h"
 #include "dsp/MatchEngine.h"
 #include "dsp/SpectrumAnalyzer.h"
@@ -41,6 +42,12 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
+
+    /** The plugin's own Bypass, handed to the host as its bypass. Without it the host's
+        button went through JUCE's default bypassed path, which neither matches the
+        latency the plugin reports nor fades -- the two problems BypassFade exists to
+        fix. With it there is one bypass, wherever it is pressed from. */
+    juce::AudioProcessorParameter* getBypassParameter() const override { return apvts.getParameter (ParamID::bypass); }
 
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
@@ -192,6 +199,9 @@ private:
     // Post-EQ trim. Ramped rather than applied per block, so turning it while audio is
     // running stays free of zipper noise.
     juce::dsp::Gain<float> outputGain;
+
+    // Bypass, faded rather than switched, against a dry path delayed to match.
+    BypassFade bypassFade;
 
     std::vector<float> monoScratch;
 
