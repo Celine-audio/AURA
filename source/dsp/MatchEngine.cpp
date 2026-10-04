@@ -353,13 +353,13 @@ const MatchEngine::CorrectionCurves& MatchEngine::getCorrectionCurves()
     return correctionCache;
 }
 
-void MatchEngine::updatePredictedCurves()
+void MatchEngine::updatePreviewCurves()
 {
-    predictionCache = {};
-    predictionDirty.store (false);
+    previewCache = {};
+    previewDirty.store (false);
 
-    // Nothing to predict while the captures still describe the match in force: the
-    // prediction would be the applied curve, drawn a second time on top of itself.
+    // Nothing to preview while the captures still describe the match in force: the
+    // preview would be the applied curve, drawn a second time on top of itself.
     if (matched.load() && ! isMatchStale())
         return;
 
@@ -369,15 +369,15 @@ void MatchEngine::updatePredictedCurves()
     if (! takeFor (source, sourceMags) || ! takeFor (reference, referenceMags))
         return;
 
-    predictionCache = deriveCurves (sourceMags, referenceMags);
+    previewCache = deriveCurves (sourceMags, referenceMags);
 }
 
-const MatchEngine::CorrectionCurves& MatchEngine::getPredictedCurves()
+const MatchEngine::CorrectionCurves& MatchEngine::getPreviewCurves()
 {
-    if (predictionDirty.load())
-        updatePredictedCurves();
+    if (previewDirty.load())
+        updatePreviewCurves();
 
-    return predictionCache;
+    return previewCache;
 }
 
 void MatchEngine::setSettings (const Settings& newSettings) noexcept

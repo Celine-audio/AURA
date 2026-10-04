@@ -25,17 +25,17 @@ namespace
                                : juce::String ((int) freq) + " Hz";
     }
 
-    // The Predict button, as far in from the plot's right edge as it is from its top, so
+    // The Preview button, as far in from the plot's right edge as it is from its top, so
     // it sits square in the corner. Ten, because the band's high edge stands on that
     // border with its grip at the top, and needs a clear run at it.
-    constexpr int predictWidth = 70;
-    constexpr int predictHeight = 22;
-    constexpr int predictInset = 10;
+    constexpr int previewWidth = 70;
+    constexpr int previewHeight = 22;
+    constexpr int previewInset = 10;
 
     // The readout box's height, and how far below the plot's top its centre sits: on the
     // button's own centre line, so the two line up when both are showing.
     constexpr float readoutHeight = 20.0f;
-    constexpr float readoutCentre = (float) predictInset + (float) predictHeight * 0.5f;
+    constexpr float readoutCentre = (float) previewInset + (float) previewHeight * 0.5f;
 }
 
 SpectrumDisplay::SpectrumDisplay()
@@ -48,21 +48,21 @@ SpectrumDisplay::SpectrumDisplay()
     // with layout during a resize drag, which is where it showed.
     setOpaque (true);
 
-    predictButton.setClickingTogglesState (true);
-    predictButton.setToggleState (true, juce::dontSendNotification);
-    predictButton.setWantsKeyboardFocus (false);
-    predictButton.setTooltip ("Draw, on the spectrum analyser, the not yet applied EQ curve.");
+    previewButton.setClickingTogglesState (true);
+    previewButton.setToggleState (true, juce::dontSendNotification);
+    previewButton.setWantsKeyboardFocus (false);
+    previewButton.setTooltip ("Draw the preview of the EQ curve.");
 
-    predictButton.onClick = [this]
+    previewButton.onClick = [this]
     {
-        if (onPredictionShownChanged != nullptr)
-            onPredictionShownChanged (predictButton.getToggleState());
+        if (onPreviewShownChanged != nullptr)
+            onPreviewShownChanged (previewButton.getToggleState());
 
         repaint();
     };
 
     applyColours();
-    addAndMakeVisible (predictButton);
+    addAndMakeVisible (previewButton);
 }
 
 void SpectrumDisplay::applyColours()
@@ -74,24 +74,24 @@ void SpectrumDisplay::applyColours()
     const auto ground = Theme::background();
     const auto orange = Theme::stale();
 
-    predictButton.setColour (juce::TextButton::buttonColourId, Theme::surface());
-    predictButton.setColour (juce::TextButton::buttonOnColourId, ground.overlaidWith (orange.withAlpha (0.24f)));
-    predictButton.setColour (juce::TextButton::textColourOffId, Theme::textDim());
-    predictButton.setColour (juce::TextButton::textColourOnId, orange.brighter (0.35f));
+    previewButton.setColour (juce::TextButton::buttonColourId, Theme::surface());
+    previewButton.setColour (juce::TextButton::buttonOnColourId, ground.overlaidWith (orange.withAlpha (0.24f)));
+    previewButton.setColour (juce::TextButton::textColourOffId, Theme::textDim());
+    previewButton.setColour (juce::TextButton::textColourOnId, orange.brighter (0.35f));
 }
 
-void SpectrumDisplay::setPrediction (const std::vector<float>& leftDb, const std::vector<float>& rightDb)
+void SpectrumDisplay::setPreview (const std::vector<float>& leftDb, const std::vector<float>& rightDb)
 {
-    predictionLeft = leftDb;
-    predictionRight = rightDb;
+    previewLeft = leftDb;
+    previewRight = rightDb;
 }
 
-void SpectrumDisplay::setPredictionShown (bool shouldShow)
+void SpectrumDisplay::setPreviewShown (bool shouldShow)
 {
-    if (predictButton.getToggleState() == shouldShow)
+    if (previewButton.getToggleState() == shouldShow)
         return;
 
-    predictButton.setToggleState (shouldShow, juce::dontSendNotification);
+    previewButton.setToggleState (shouldShow, juce::dontSendNotification);
     repaint();
 }
 
@@ -99,9 +99,9 @@ void SpectrumDisplay::resized()
 {
     const auto plot = getPlot().bounds;
 
-    predictButton.setBounds (juce::roundToInt (plot.getRight()) - predictInset - predictWidth,
-                             juce::roundToInt (plot.getY()) + predictInset,
-                             predictWidth, predictHeight);
+    previewButton.setBounds (juce::roundToInt (plot.getRight()) - previewInset - previewWidth,
+                             juce::roundToInt (plot.getY()) + previewInset,
+                             previewWidth, previewHeight);
 }
 
 Theme::Role SpectrumDisplay::roleFor (View v)
@@ -548,9 +548,9 @@ bool SpectrumDisplay::readoutValueAt (float freq, juce::String& text) const
     if (showingCorrectionScale())
     {
         const auto applied = correctionLeft.size() > 1;
-        const auto predicted = drawsPrediction();
+        const auto previewed = drawsPreview();
 
-        if (! applied && ! predicted)
+        if (! applied && ! previewed)
             return false;
 
         const auto at = [&] (const std::vector<float>& db)
@@ -562,12 +562,12 @@ bool SpectrumDisplay::readoutValueAt (float freq, juce::String& text) const
         // where Match would move it. In words rather than with an arrow, which Jura does
         // not have. Unlinked that would be four numbers, so it reports whichever curve
         // is the one being looked at: the pending one if there is one.
-        if (linked && applied && predicted)
-            text << at (correctionLeft) << " dB   predicted " << at (predictionLeft) << " dB";
+        if (linked && applied && previewed)
+            text << at (correctionLeft) << " dB   preview " << at (previewLeft) << " dB";
         else if (linked)
-            text << at (predicted ? predictionLeft : correctionLeft) << " dB";
-        else if (predicted)
-            text << "L " << at (predictionLeft) << "   R " << at (predictionRight) << " dB";
+            text << at (previewed ? previewLeft : correctionLeft) << " dB";
+        else if (previewed)
+            text << "L " << at (previewLeft) << "   R " << at (previewRight) << " dB";
         else
             text << "L " << at (correctionLeft) << "   R " << at (correctionRight) << " dB";
 
@@ -608,10 +608,10 @@ void SpectrumDisplay::drawReadout (juce::Graphics& g, PlotGeometry area) const
     const auto font = Fonts::light (11.0f);
     const auto width = juce::GlyphArrangement::getStringWidth (font, text) + 16.0f;
 
-    // Kept clear of the Predict button when it is up, with the gap the button keeps
+    // Kept clear of the Preview button when it is up, with the gap the button keeps
     // from the plot's edge, rather than sliding underneath it.
-    const auto right = predictButton.isVisible()
-                           ? juce::jmax (area.getX() + width, (float) (predictButton.getX() - predictInset))
+    const auto right = previewButton.isVisible()
+                           ? juce::jmax (area.getX() + width, (float) (previewButton.getX() - previewInset))
                            : area.getRight();
 
     const auto box = juce::Rectangle<float> (width, readoutHeight)
@@ -666,10 +666,10 @@ void SpectrumDisplay::paint (juce::Graphics& g)
 
         // And what Match would make of it, on top, at the same weight. This is where you
         // are looking while a Learn runs -- pressing one brings its tab up -- so it is
-        // where the prediction can be watched settling as the take builds. A shade
+        // where the preview can be watched settling as the take builds. A shade
         // stronger than the violet, because it is the one that is moving.
-        if (drawsPrediction())
-            drawCorrection (g, plot, predictionLeft, Theme::stale().withAlpha (0.7f), false, 1.5f);
+        if (drawsPreview())
+            drawCorrection (g, plot, previewLeft, Theme::stale().withAlpha (0.7f), false, 1.5f);
     }
 
     // Every tab shows all three, so the picture stays a comparison rather than a
@@ -735,14 +735,14 @@ void SpectrumDisplay::paint (juce::Graphics& g)
             // What Match would build, on top: it is the news. Filled only when there is
             // nothing applied for it to be compared with -- two fills over one another
             // muddy into a third colour that means neither.
-            if (drawsPrediction())
+            if (drawsPreview())
             {
                 const auto alone = correctionLeft.size() < 2;
 
-                drawCorrection (g, plot, predictionLeft, Theme::stale(), alone);
+                drawCorrection (g, plot, previewLeft, Theme::stale(), alone);
 
                 if (! linked)
-                    drawCorrection (g, plot, predictionRight, Theme::stale().withRotatedHue (0.04f), false, 1.5f);
+                    drawCorrection (g, plot, previewRight, Theme::stale().withRotatedHue (0.04f), false, 1.5f);
             }
             break;
     }

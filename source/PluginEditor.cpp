@@ -96,7 +96,7 @@ namespace
     // Where the window keeps what it remembers about itself besides its size.
     // Both are properties of the session rather than parameters: neither is something a
     // host should automate.
-    const juce::Identifier predictProperty { "predict" };
+    const juce::Identifier previewProperty { "preview" };
     const juce::Identifier importFolderProperty { "importFolder" };
     const juce::Identifier viewShiftProperty { "viewShift" };
 }
@@ -220,10 +220,10 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     // On unless it was turned off: seeing what Match will do before doing it is the
     // safer way to work, and the switch is right there for anyone who would rather not.
-    display.setPredictionShown ((bool) state.getProperty (predictProperty, true));
-    display.onPredictionShownChanged = [this] (bool shown)
+    display.setPreviewShown ((bool) state.getProperty (previewProperty, true));
+    display.onPreviewShownChanged = [this] (bool shown)
     {
-        processorRef.getAPVTS().state.setProperty (predictProperty, shown, nullptr);
+        processorRef.getAPVTS().state.setProperty (previewProperty, shown, nullptr);
         refreshDisplay();
     };
 
@@ -461,9 +461,9 @@ void PluginEditor::refreshDisplay()
     const auto value = [&apvts] (const char* id) { return apvts.getRawParameterValue (id)->load(); };
 
     // Violet is what the plugin is doing, so it is only drawn once a match is in
-    // force. Before that the engine still derives a curve from the captures, but it
-    // is a preview of a filter nobody is hearing -- which is the prediction's job, in
-    // the prediction's colour.
+    // force. Before that the engine still derives a curve from the captures, but it is
+    // a filter nobody is hearing yet: it is drawn as the preview, in the preview's
+    // colour.
     static const PluginProcessor::CorrectionCurves noCurves;
 
     const auto& curves = processorRef.getCorrectionCurves();
@@ -472,8 +472,8 @@ void PluginEditor::refreshDisplay()
 
     // Only asked for while it is wanted: it is a second derivation of the curve, and
     // while a capture runs it is re-derived every time the capture moves.
-    const auto& predicted = display.isPredictionShown() ? processorRef.getPredictedCurves() : noCurves;
-    display.setPrediction (predicted.leftDb, predicted.rightDb);
+    const auto& preview = display.isPreviewShown() ? processorRef.getPreviewCurves() : noCurves;
+    display.setPreview (preview.leftDb, preview.rightDb);
 
     display.setBand (value (ParamID::lowFreq), value (ParamID::highFreq));
 
@@ -484,9 +484,9 @@ void PluginEditor::refreshDisplay()
     // to show the moment audio is playing, match or no match.
     const auto bypassed = value (ParamID::bypass) > 0.5f;
     const auto needsMatch = display.getView() == SpectrumDisplay::View::eqCurve
-                         && ! applied.isValid() && ! predicted.isValid();
+                         && ! applied.isValid() && ! preview.isValid();
 
-    // With both takes in and Predict off there is a curve to build and nothing on screen
+    // With both takes in and Preview off there is a curve to build and nothing on screen
     // to say so, so the empty state says it instead.
     const auto emptyState = ! needsMatch           ? juce::String()
                           : processorRef.canMatch() ? juce::String ("Press Match to apply the correction")

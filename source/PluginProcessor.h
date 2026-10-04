@@ -139,7 +139,7 @@ public:
 
     /** What pressing Match would build now, when that differs from what is applied:
         before the first match, and once the match is out of date. Empty otherwise. */
-    const CorrectionCurves& getPredictedCurves() { return engine.getPredictedCurves(); }
+    const CorrectionCurves& getPreviewCurves() { return engine.getPreviewCurves(); }
 
     /** Flags the cached curves as out of date. The editor calls this while a capture
         is accumulating; parameter and match changes mark it internally. */

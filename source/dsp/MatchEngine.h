@@ -137,15 +137,15 @@ public:
 
         The same settings and the same derivation as getCorrectionCurves(), from the
         spectra performMatch() would snapshot, so what it shows is what you get. */
-    const CorrectionCurves& getPredictedCurves();
+    const CorrectionCurves& getPreviewCurves();
 
-    /** Flags the cached curves -- applied and predicted -- as out of date. Callers use
+    /** Flags the cached curves -- applied and previewed -- as out of date. Callers use
         this while a capture is accumulating; setSettings and performMatch mark it
         internally. */
     void markCorrectionDirty() noexcept
     {
         correctionDirty.store (true);
-        predictionDirty.store (true);
+        previewDirty.store (true);
     }
 
     /** New curve-shaping settings. Marks the cache dirty and schedules a throttled
@@ -241,11 +241,11 @@ private:
     bool collectCaptures (Spectra& source, Spectra& reference) const;
 
     void updateCorrectionCurves();
-    void updatePredictedCurves();
+    void updatePreviewCurves();
 
     // Derives a correction from two takes with the settings in force: per channel, then
-    // linked. The one place it is done, so the prediction cannot drift from the curve
-    // it is predicting.
+    // linked. The one place it is done, so the preview cannot drift from the curve
+    // it is a preview of.
     CorrectionCurves deriveCurves (const Spectra& sourceMags, const Spectra& referenceMags) const;
 
     // Rebuilds the impulse response and loads it into the convolution. No-op if there
@@ -262,13 +262,13 @@ private:
 
     PartitionedConvolver convolution;
 
-    CorrectionCurves correctionCache, predictionCache;
+    CorrectionCurves correctionCache, previewCache;
 
     /** Message thread only -- see setSettings. */
     Settings settings;
 
     std::atomic<bool> correctionDirty { true };
-    std::atomic<bool> predictionDirty { true };
+    std::atomic<bool> previewDirty { true };
     std::atomic<bool> matched { false };
 
     double sampleRate = 44100.0;

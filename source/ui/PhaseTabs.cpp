@@ -343,9 +343,11 @@ PhaseTabBar::PhaseTabBar()
     //tabs[(size_t) reference]->setTooltip ("Reference signal.");
     //abs[(size_t) eqCurve]->setTooltip ("Matched curve.");
 
-    // Only the reference can come from a file: it is the material being matched to, and
-    // a finished track is exactly what people want to match to. The current is what is
-    // going through the plugin, which is only ever learned by listening to it.
+    // Both signals can come from a file. The reference most often -- a finished track is
+    // exactly what people want to match to -- but the current too: a bounce of the mix
+    // being corrected learns as well as the mix playing does, and two files make a
+    // correction, and an impulse response, without the transport running at all.
+    tabs[(size_t) current]->enableImport();
     tabs[(size_t) reference]->enableImport();
 
     tabs[(size_t) current]->setSelected (true);

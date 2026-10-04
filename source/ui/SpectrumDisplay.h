@@ -24,12 +24,12 @@
     is the thing the plugin is doing and it is worth being able to see it while
     looking at the material it was derived from.
 
-    It can also draw the prediction: the correction Match would build from what has
+    It can also draw the preview: the correction Match would build from what has
     been learned since, in the out-of-date orange the Match button wears to ask for
     pressing, so you can see what pressing it will do before you do. On every view, and
     for the same reason the correction is: a Learn brings its own tab up, so the
-    prediction moving as the take builds is only worth having if it is drawn there. The
-    Predict button in the view's top right turns it on and off.
+    preview moving as the take builds is only worth having if it is drawn there. The
+    Preview button in the view's top right turns it on and off.
 
     All data is supplied from the message thread (the editor's timer). Spectra are
     linear magnitudes indexed by FFT bin (length == fftSize/2 + 1), on the analyzer's
@@ -78,15 +78,15 @@ public:
 
     /** The correction Match would build now, when it differs from the applied one.
         Same shape as setCorrection; pass empty curves when there is nothing pending. */
-    void setPrediction (const std::vector<float>& leftDb, const std::vector<float>& rightDb);
+    void setPreview (const std::vector<float>& leftDb, const std::vector<float>& rightDb);
 
-    /** Whether the prediction is drawn, which is the Predict button's state. */
-    void setPredictionShown (bool shouldShow);
-    bool isPredictionShown() const noexcept { return predictButton.getToggleState(); }
+    /** Whether the preview is drawn, which is the Preview button's state. */
+    void setPreviewShown (bool shouldShow);
+    bool isPreviewShown() const noexcept { return previewButton.getToggleState(); }
 
-    /** Called when the Predict button is pressed, with its new state. The editor keeps
-        the choice with the session and asks for the prediction only while it is on. */
-    std::function<void (bool)> onPredictionShownChanged;
+    /** Called when the Preview button is pressed, with its new state. The editor keeps
+        the choice with the session and asks for the preview only while it is on. */
+    std::function<void (bool)> onPreviewShownChanged;
 
     /** How solidly each moving trace is drawn, 1 down to 0. The editor winds these
         down when its analyzer stops producing frames, so a stopped transport dissolves
@@ -145,7 +145,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    /** The Predict button's colours, which a TextButton has to be told. */
+    /** The Preview button's colours, which a TextButton has to be told. */
     void applyColours();
     void lookAndFeelChanged() override { applyColours(); }
 
@@ -228,17 +228,17 @@ private:
 
     std::vector<float> liveCurrent, liveReference, learnedCurrent, learnedReference;
     std::vector<float> correctionLeft, correctionRight;
-    std::vector<float> predictionLeft, predictionRight;
+    std::vector<float> previewLeft, previewRight;
 
-    // True when there is a prediction and it is wanted -- what decides whether it is
+    // True when there is a preview and it is wanted -- what decides whether it is
     // drawn and whether the readout reports it.
-    bool drawsPrediction() const noexcept
+    bool drawsPreview() const noexcept
     {
-        return isPredictionShown() && predictionLeft.size() > 1;
+        return isPreviewShown() && previewLeft.size() > 1;
     }
 
-    // Top right of the plot, on every view, since the prediction is drawn on every view.
-    juce::TextButton predictButton { "Predict" };
+    // Top right of the plot, on every view, since the preview is drawn on every view.
+    juce::TextButton previewButton { "Preview" };
     float correctionOffsetDb = 0.0f;
     bool linked = true;
 

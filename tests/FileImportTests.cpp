@@ -280,15 +280,15 @@ TEST_CASE ("A Learn replaces an imported take", "[import]")
 }
 
 //==============================================================================
-TEST_CASE ("The prediction is what Match would build", "[predict]")
+TEST_CASE ("The preview is what Match would build", "[preview]")
 {
     MatchEngine engine;
     engine.prepare (48000.0, blockSize, 2);
 
-    SECTION ("nothing to predict until both sides hold a take")
+    SECTION ("nothing to preview until both sides hold a take")
     {
         learnNoise (engine, MatchEngine::Side::source, 0.9f, 1);
-        CHECK_FALSE (engine.getPredictedCurves().isValid());
+        CHECK_FALSE (engine.getPreviewCurves().isValid());
     }
 
     SECTION ("before the first match, it is the curve the match then applies")
@@ -296,11 +296,11 @@ TEST_CASE ("The prediction is what Match would build", "[predict]")
         learnNoise (engine, MatchEngine::Side::source, 0.9f, 1);
         learnNoise (engine, MatchEngine::Side::reference, 0.0f, 2);
 
-        const auto predicted = engine.getPredictedCurves(); // a copy: matching empties it
-        REQUIRE (predicted.isValid());
+        const auto preview = engine.getPreviewCurves(); // a copy: matching empties it
+        REQUIRE (preview.isValid());
 
         REQUIRE (engine.performMatch());
-        requireSameCurves (engine.getCorrectionCurves(), predicted);
+        requireSameCurves (engine.getCorrectionCurves(), preview);
     }
 
     SECTION ("an up-to-date match leaves nothing pending")
@@ -309,10 +309,10 @@ TEST_CASE ("The prediction is what Match would build", "[predict]")
         learnNoise (engine, MatchEngine::Side::reference, 0.0f, 2);
         REQUIRE (engine.performMatch());
 
-        CHECK_FALSE (engine.getPredictedCurves().isValid());
+        CHECK_FALSE (engine.getPreviewCurves().isValid());
     }
 
-    SECTION ("a match gone out of date predicts the next one, and leaves the applied curve alone")
+    SECTION ("a match gone out of date previews the next one, and leaves the applied curve alone")
     {
         learnNoise (engine, MatchEngine::Side::source, 0.9f, 1);
         learnNoise (engine, MatchEngine::Side::reference, 0.0f, 2);
@@ -323,16 +323,16 @@ TEST_CASE ("The prediction is what Match would build", "[predict]")
         engine.importTake (MatchEngine::Side::reference, noiseSpectra (0.6f, 4), 48000.0, "darker.wav");
         REQUIRE (engine.isMatchStale());
 
-        const auto predicted = engine.getPredictedCurves();
-        REQUIRE (predicted.isValid());
+        const auto preview = engine.getPreviewCurves();
+        REQUIRE (preview.isValid());
 
         // Still the old filter until Match is pressed...
         requireSameCurves (engine.getCorrectionCurves(), appliedBefore);
 
-        // ...and the new one once it is, which is the one that was predicted.
+        // ...and the new one once it is, which is the one that was previewed.
         REQUIRE (engine.performMatch());
-        requireSameCurves (engine.getCorrectionCurves(), predicted);
-        CHECK_FALSE (engine.getPredictedCurves().isValid());
+        requireSameCurves (engine.getCorrectionCurves(), preview);
+        CHECK_FALSE (engine.getPreviewCurves().isValid());
     }
 
     SECTION ("it follows the settings, like the applied curve does")
@@ -340,13 +340,13 @@ TEST_CASE ("The prediction is what Match would build", "[predict]")
         learnNoise (engine, MatchEngine::Side::source, 0.9f, 1);
         learnNoise (engine, MatchEngine::Side::reference, 0.0f, 2);
 
-        const auto full = engine.getPredictedCurves().leftDb;
+        const auto full = engine.getPreviewCurves().leftDb;
 
         MatchEngine::Settings halved;
         halved.design.amount = 0.5f;
         engine.setSettings (halved);
 
-        const auto& half = engine.getPredictedCurves().leftDb;
+        const auto& half = engine.getPreviewCurves().leftDb;
         REQUIRE (half.size() == full.size());
 
         // At 2 kHz, where the curve is well inside the limits: higher up it reaches the
