@@ -90,6 +90,7 @@ MatchEngine::Settings PluginProcessor::currentSettings() const
     settings.design.smoothingOctaves = value (ParamID::smoothing);
     settings.design.lowFreqHz = value (ParamID::lowFreq);
     settings.design.highFreqHz = value (ParamID::highFreq);
+    settings.design.outputGainDb = value (ParamID::outputGain);
     settings.link = value (ParamID::link);
 
     // The choice parameter's raw value is its index: 0 is Linear.

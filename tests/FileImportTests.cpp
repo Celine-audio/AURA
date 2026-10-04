@@ -349,7 +349,10 @@ TEST_CASE ("The prediction is what Match would build", "[predict]")
         const auto& half = engine.getPredictedCurves().leftDb;
         REQUIRE (half.size() == full.size());
 
-        const auto k = full.size() * 3 / 4;
+        // At 2 kHz, where the curve is well inside the limits: higher up it reaches the
+        // boost ceiling at full amount, and a clamped value does not halve.
+        const auto k = (size_t) std::round (2000.0 / (48000.0 / (double) (1 << spectrumFftOrder)));
+        REQUIRE (std::abs (full[k]) < 18.0f);
         CHECK_THAT (half[k], Catch::Matchers::WithinAbs (full[k] * 0.5f, 0.05f));
     }
 }

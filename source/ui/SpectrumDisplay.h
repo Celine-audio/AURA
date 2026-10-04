@@ -24,10 +24,12 @@
     is the thing the plugin is doing and it is worth being able to see it while
     looking at the material it was derived from.
 
-    On the EQ Curve view it can also draw the prediction: the correction Match would
-    build from what has been learned since, in the out-of-date orange the Match button
-    wears to ask for pressing, so you can see what pressing it will do before you do.
-    The Predict button in the view's top right turns that on and off.
+    It can also draw the prediction: the correction Match would build from what has
+    been learned since, in the out-of-date orange the Match button wears to ask for
+    pressing, so you can see what pressing it will do before you do. On every view, and
+    for the same reason the correction is: a Learn brings its own tab up, so the
+    prediction moving as the take builds is only worth having if it is drawn there. The
+    Predict button in the view's top right turns it on and off.
 
     All data is supplied from the message thread (the editor's timer). Spectra are
     linear magnitudes indexed by FFT bin (length == fftSize/2 + 1), on the analyzer's
@@ -126,6 +128,17 @@ public:
         unrelated writes. Names the same edge onBandDragged will. */
     std::function<void (BandEdge, bool starting)> onBandGesture;
 
+    /** How far the view is slid up or down, in dB of correction -- see
+        PlotGeometry::shiftDb. Dragging the graph anywhere but on a band edge slides it,
+        keeping its span; a double-click puts it back. Clamped to the range PlotGeometry
+        allows. */
+    void setViewShift (float correctionDb);
+    float getViewShift() const noexcept { return viewShiftDb; }
+
+    /** Called when a drag or a double-click has moved the view, once it has settled
+        rather than on every mouse move. The editor keeps it with the session. */
+    std::function<void (float correctionDb)> onViewShiftChanged;
+
     /** Dims the whole view and says why, e.g. while the plugin is bypassed. */
     void setOverlayMessage (const juce::String& message);
 
@@ -141,6 +154,7 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
 
     /** The colour the given view is drawn in. Also used by the tab bar, so a tab
         matches the curve it selects.
@@ -220,10 +234,10 @@ private:
     // drawn and whether the readout reports it.
     bool drawsPrediction() const noexcept
     {
-        return view == View::eqCurve && isPredictionShown() && predictionLeft.size() > 1;
+        return isPredictionShown() && predictionLeft.size() > 1;
     }
 
-    // Top right of the plot, and only on the view it is about.
+    // Top right of the plot, on every view, since the prediction is drawn on every view.
     juce::TextButton predictButton { "Predict" };
     float correctionOffsetDb = 0.0f;
     bool linked = true;
@@ -241,6 +255,12 @@ private:
     // Which edge is being dragged, and which one the pointer is merely over — the
     // second so a grip lights up before you commit to it.
     std::optional<BandEdge> dragging, hovered;
+
+    float viewShiftDb = 0.0f;
+
+    // Set while the view itself is being dragged: the shift it started from. Empty when
+    // the drag is a band edge's, or there is none.
+    std::optional<float> viewDragFrom;
 
     /** How close the pointer has to get, in pixels. Generous: the line itself is one
         pixel and nobody can hit that. */

@@ -34,6 +34,17 @@ namespace FilterDesigner
             its neighbours when the smoother below spreads it. */
         float maxBoostDb = 24.0f;
         float maxCutDb = 60.0f;
+
+        /** The output trim applied after the filter, in dB.
+
+            The limits above are measured against the response as a whole -- this trim
+            included -- rather than against the correction alone. So a reference far
+            louder than the source still runs the correction into the ceiling, and the
+            shape is lost where it does; but turning the output down lowers the whole
+            response, the clamped stretch comes back under the ceiling, and the shape
+            comes back with it. The difference itself is never thrown away: it is the
+            clamp that moves, not the curve. */
+        float outputGainDb = 0.0f;
         float smoothingOctaves = 1.0f / 3.0f; // width of the Gaussian window; 0 = no smoothing
         float lowFreqHz = 20.0f;              // correction fades out below this
         float highFreqHz = 20000.0f;          // correction fades out above this
@@ -53,8 +64,8 @@ namespace FilterDesigner
         static constexpr float noHighBound = 20000.0f;
     };
 
-    /** Computes the per-bin correction in dB (referenceMag / sourceMag), clamped,
-        amount-scaled, smoothed over a fractional-octave Gaussian window and faded
+    /** Computes the per-bin correction in dB (referenceMag / sourceMag), amount-scaled,
+        clamped so that it and the output trim together stay inside the limits, smoothed over a fractional-octave Gaussian window and faded
         out beyond the band limits.
         sourceMag and referenceMag must be the same length (numBins == fftSize/2 + 1). */
     std::vector<float> computeCorrectionDb (const std::vector<float>& sourceMag,

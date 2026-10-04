@@ -93,11 +93,12 @@ namespace
                                              : PluginProcessor::Side::reference;
     }
 
-    // Where the window keeps the two things it remembers about itself besides its size.
+    // Where the window keeps what it remembers about itself besides its size.
     // Both are properties of the session rather than parameters: neither is something a
     // host should automate.
     const juce::Identifier predictProperty { "predict" };
     const juce::Identifier importFolderProperty { "importFolder" };
+    const juce::Identifier viewShiftProperty { "viewShift" };
 }
 
 PluginEditor::PluginEditor (PluginProcessor& p)
@@ -113,8 +114,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     // rather than put on the desktop, so what shows through the corners is this window.
     tooltips.setOpaque (false);
 
-    display.setTooltip ("The signal, the reference and the correction between them. "
-                        "Drag the band edges to choose how much of the spectrum is matched.");
+    //display.setTooltip ("The signal, the reference and the correction between them. Drag the band edges to choose how much of the spectrum is matched.");
     addAndMakeVisible (display);
 
     tabBar.onSelectionChanged = [this] (PhaseTabBar::Stage stage)
@@ -225,6 +225,13 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     {
         processorRef.getAPVTS().state.setProperty (predictProperty, shown, nullptr);
         refreshDisplay();
+    };
+
+    // Where the graph was last slid to, so reopening the window finds it there.
+    display.setViewShift ((float) state.getProperty (viewShiftProperty, 0.0f));
+    display.onViewShiftChanged = [this] (float shift)
+    {
+        processorRef.getAPVTS().state.setProperty (viewShiftProperty, shift, nullptr);
     };
 
     // The second flag is the corner grip. With a fixed ratio below, that is the

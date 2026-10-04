@@ -180,12 +180,23 @@ namespace FilterDesigner
         // reference, which is how you exaggerate a difference instead of removing it.
         const auto amount = std::clamp (params.amount, -1.0f, 1.0f);
 
+        // The limits bound the response you hear -- correction plus output trim -- so a
+        // bin is held where the two together meet a limit. See Params::outputGainDb: it is
+        // what lets the output fader pull a clamped boost back under the ceiling and
+        // recover its shape. A bin inside the limits is left exactly as it was asked for,
+        // rather than having the trim added and taken off again, so moving the trim
+        // changes nothing at all until something reaches a limit.
+        const auto trim = params.outputGainDb;
+
         for (size_t k = 0; k < numBins; ++k)
         {
             const auto ratio = (referenceMag[k] + epsilon) / (sourceMag[k] + epsilon);
-            auto db = linToDb (ratio);
-            db = std::clamp (db, -params.maxCutDb, params.maxBoostDb);
-            correctionDb[k] = db * amount;
+            const auto wanted = linToDb (ratio) * amount;
+            const auto heard = wanted + trim;
+
+            correctionDb[k] = heard > params.maxBoostDb ? params.maxBoostDb - trim
+                            : heard < -params.maxCutDb  ? -params.maxCutDb - trim
+                                                        : wanted;
         }
 
         smoothOctaves (correctionDb, sampleRate, params.smoothingOctaves);

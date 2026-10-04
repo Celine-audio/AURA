@@ -1,4 +1,5 @@
 #include "helpers/test_helpers.h"
+#include <dsp/FilterDesigner.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -451,23 +452,78 @@ TEST_CASE ("Bypass takes the output gain out with the EQ", "[processor]")
     CHECK_THAT (steadyOutputRms (plugin) / unity, Catch::Matchers::WithinRel (1.0f, 0.02f));
 }
 
-TEST_CASE ("Output gain does not rebuild the filter", "[processor]")
+TEST_CASE ("Output gain leaves a correction inside the limits untouched", "[processor]")
+{
+    // The trim rides on the output, so a correction that stays inside the limits with
+    // it is untouched to the bit -- the output fader must not reshape a curve that
+    // never came near a limit. Only where the two together meet one does the trim move
+    // the correction; see the test below.
+    FilterDesigner::Params params;
+
+    constexpr size_t bins = 512;
+    std::vector<float> source (bins), reference (bins, 0.1f);
+
+    // A gentle tilt, nowhere further than 6 dB from the reference.
+    for (size_t k = 0; k < bins; ++k)
+        source[k] = 0.1f * std::pow (10.0f, (-6.0f + 12.0f * (float) k / (float) bins) / 20.0f);
+
+    const auto flat = FilterDesigner::computeCorrectionDb (source, reference, sampleRate, params);
+
+    for (const auto trimDb : { -24.0f, -9.0f, 9.0f, 17.0f })
+    {
+        params.outputGainDb = trimDb;
+        const auto trimmed = FilterDesigner::computeCorrectionDb (source, reference, sampleRate, params);
+
+        REQUIRE (trimmed == flat);
+    }
+}
+
+TEST_CASE ("Turning the output down recovers a boost that ran into the ceiling", "[processor]")
+{
+    // A reference far louder than the source asks for more boost than the ceiling
+    // allows, and the correction is flattened against it. The difference itself is
+    // kept, though: the ceiling is measured against the whole response, trim included,
+    // so lowering the output brings the flattened stretch back under it and the shape
+    // the captures asked for comes back.
+    FilterDesigner::Params params;
+    params.smoothingOctaves = 0.0f;
+
+    constexpr size_t bins = 512;
+    std::vector<float> source (bins, 0.01f), reference (bins, 0.1f); // +20 dB everywhere
+
+    // ...and +30 dB over the top quarter, which is past the +24 ceiling.
+    for (size_t k = bins * 3 / 4; k < bins; ++k)
+        reference[k] = 0.316f;
+
+    const auto loud = FilterDesigner::computeCorrectionDb (source, reference, sampleRate, params);
+
+    CHECK_THAT (loud[bins / 4], Catch::Matchers::WithinAbs (20.0f, 0.01f));
+    CHECK_THAT (loud[bins - 10], Catch::Matchers::WithinAbs (24.0f, 0.01f)); // flattened
+
+    params.outputGainDb = -12.0f;
+    const auto trimmed = FilterDesigner::computeCorrectionDb (source, reference, sampleRate, params);
+
+    // The same correction, all of it now -- with the trim, the response peaks at +18.
+    CHECK_THAT (trimmed[bins / 4], Catch::Matchers::WithinAbs (20.0f, 0.01f));
+    CHECK_THAT (trimmed[bins - 10], Catch::Matchers::WithinAbs (30.0f, 0.02f));
+    CHECK_THAT (trimmed[bins - 10] + params.outputGainDb, Catch::Matchers::WithinAbs (18.0f, 0.02f));
+}
+
+TEST_CASE ("The output fader reaches the correction through the plugin", "[processor]")
 {
     PluginProcessor plugin;
     captureAsymmetricMatch (plugin);
 
-    const auto before = plugin.getCorrectionCurves().leftDb; // copy
-
     auto* gain = plugin.getAPVTS().getParameter ("outputGain");
     REQUIRE (gain != nullptr);
-    gain->setValueNotifyingHost (gain->convertTo0to1 (9.0f));
 
-    // The trim rides on the output, so the correction curve itself is untouched.
-    const auto& after = plugin.getCorrectionCurves();
-    REQUIRE (after.leftDb.size() == before.size());
+    // A +24 dB trim leaves the correction no room to boost at all, so wherever it was
+    // boosting it is now held at zero.
+    gain->setValueNotifyingHost (gain->convertTo0to1 (24.0f));
+    plugin.markCorrectionDirty();
 
-    for (size_t k = 0; k < before.size(); ++k)
-        REQUIRE_THAT (after.leftDb[k], Catch::Matchers::WithinAbs (before[k], 1.0e-6f));
+    for (const auto db : plugin.getCorrectionCurves().leftDb)
+        REQUIRE (db <= 1.0e-4f);
 }
 
 TEST_CASE ("A parameter drag is throttled but never loses the last move", "[processor]")

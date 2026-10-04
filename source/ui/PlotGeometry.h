@@ -17,10 +17,20 @@
     exactly the same places. That is what lets one fixed grid serve whichever tab is
     showing, instead of the lines jumping by half a division when the subject changes.
     Break the ratio and the labels stop landing on the lines.
+
+    The window onto both can be slid up and down -- see shiftDb -- without changing
+    either span. They move together and in the same 2:1 proportion, so a gridline at a
+    round number of one scale is still at a round number of the other however far the
+    view has been moved.
 */
 struct PlotGeometry
 {
     juce::Rectangle<float> bounds;
+
+    /** How far the view has been slid, in dB of correction: positive shows higher values,
+        negative lower. The spectrum scale moves by twice this, which keeps the pair 2:1.
+        Zero is the window as designed: ±24 dB of correction, 0 to -96 dBFS. */
+    float shiftDb = 0.0f;
 
     //==========================================================================
     static constexpr float minFreq = 20.0f;
@@ -37,6 +47,16 @@ struct PlotGeometry
 
     /** Horizontal divisions of the plot: 12 dB of signal, 6 dB of correction. */
     static constexpr int gridDivisions = 8;
+
+    /** One division, in dB of correction. The gridlines are placed at multiples of it,
+        which is what keeps them on the values rather than on the plot once it moves. */
+    static constexpr float correctionStepDb = 2.0f * correctionRangeDb / (float) gridDivisions;
+
+    /** How far the view may be slid. Down until the floor is the deepest cut the
+        correction can make (FilterDesigner's 60 dB), and up by half a scale -- enough to
+        get the top of a loud signal off the edge without slipping into empty space. */
+    static constexpr float minShiftDb = -36.0f;
+    static constexpr float maxShiftDb = 12.0f;
 
     //==========================================================================
     // The rectangle's own scalar accessors, forwarded, so drawing code can ask this
@@ -67,16 +87,41 @@ struct PlotGeometry
         return std::pow (10.0f, logMin() + proportion * (logMax() - logMin()));
     }
 
+    // The two windows as they stand, after the shift.
+    float correctionBottomDb() const noexcept { return shiftDb - correctionRangeDb; }
+    float correctionTopDb() const noexcept    { return shiftDb + correctionRangeDb; }
+    float spectrumBottomDb() const noexcept   { return spectrumFloorDb + 2.0f * shiftDb; }
+    float spectrumTopDbNow() const noexcept   { return spectrumTopDb + 2.0f * shiftDb; }
+
+    /** What a correction value reads as on the spectrum scale: the label on the other
+        side of the same gridline. Independent of the shift, since both scales move. */
+    static float spectrumDbAtCorrection (float correctionDb) noexcept
+    {
+        return spectrumFloorDb + (correctionDb + correctionRangeDb) * (spectrumTopDb - spectrumFloorDb)
+                                     / (2.0f * correctionRangeDb);
+    }
+
+    // Held at the floor, so a quiet trace or a deep cut lies along the bottom saying
+    // there is more below -- but not at the ceiling. Before the view could move, nothing
+    // reached the top; now that sliding it down puts the loud part of a curve above the
+    // window, holding it to the edge drew a flat line there that looked like part of the
+    // picture. Above, it is left to run off, and the display clips it to the plot.
     float correctionDbToY (float db) const noexcept
     {
-        const auto clamped = juce::jlimit (-correctionRangeDb, correctionRangeDb, db);
-        return proportionToY ((clamped + correctionRangeDb) / (2.0f * correctionRangeDb));
+        const auto clamped = juce::jmax (correctionBottomDb(), db);
+        return proportionToY ((clamped - correctionBottomDb()) / (2.0f * correctionRangeDb));
     }
 
     float spectrumDbToY (float db) const noexcept
     {
-        const auto clamped = juce::jlimit (spectrumFloorDb, spectrumTopDb, db);
-        return proportionToY ((clamped - spectrumFloorDb) / (spectrumTopDb - spectrumFloorDb));
+        const auto clamped = juce::jmax (spectrumBottomDb(), db);
+        return proportionToY ((clamped - spectrumBottomDb()) / (spectrumTopDb - spectrumFloorDb));
+    }
+
+    /** How many dB of correction a vertical distance on screen spans, for dragging. */
+    float correctionDbPerPixel() const noexcept
+    {
+        return bounds.getHeight() > 0.0f ? 2.0f * correctionRangeDb / bounds.getHeight() : 0.0f;
     }
 
     /** 0 at the bottom of the plot, 1 at the top. What the gridlines are placed by,

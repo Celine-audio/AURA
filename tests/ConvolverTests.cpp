@@ -165,9 +165,9 @@ TEST_CASE ("Sweeping a curve control does not click", "[convolver]")
     CHECK (worstJumpWhileSweeping (ParamID::lowFreq, 20.0f, 2000.0f) < ceiling);
     CHECK (worstJumpWhileSweeping (ParamID::link, 0.0f, 1.0f) < ceiling);
 
-    // The trim is ramped rather than rebuilt, so it is the control none of this ever
-    // applied to -- it stands here as the floor the others are measured against.
-    CHECK (worstJumpWhileSweeping (ParamID::outputGain, -12.0f, 12.0f) < ceiling);
+    // The trim is ramped, but it also moves where the correction meets its limits, so
+    // across its full range it reloads the filter too.
+    CHECK (worstJumpWhileSweeping (ParamID::outputGain, -24.0f, 24.0f) < ceiling);
 }
 
 TEST_CASE ("Sweeping a curve control does not click in minimum phase either", "[convolver]")

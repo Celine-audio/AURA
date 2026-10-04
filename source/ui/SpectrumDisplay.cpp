@@ -51,8 +51,7 @@ SpectrumDisplay::SpectrumDisplay()
     predictButton.setClickingTogglesState (true);
     predictButton.setToggleState (true, juce::dontSendNotification);
     predictButton.setWantsKeyboardFocus (false);
-    predictButton.setTooltip ("Draw, in orange, the curve Match would build from what has been "
-                              "learned since -- what pressing it will do, before you press it.");
+    predictButton.setTooltip ("Draw, on the spectrum analyser, the not yet applied EQ curve.");
 
     predictButton.onClick = [this]
     {
@@ -63,9 +62,7 @@ SpectrumDisplay::SpectrumDisplay()
     };
 
     applyColours();
-
-    // Hidden until the view it belongs to comes up -- see setView.
-    addChildComponent (predictButton);
+    addAndMakeVisible (predictButton);
 }
 
 void SpectrumDisplay::applyColours()
@@ -130,7 +127,6 @@ void SpectrumDisplay::setView (View newView)
         return;
 
     view = newView;
-    predictButton.setVisible (view == View::eqCurve);
     repaint();
 }
 
@@ -165,7 +161,18 @@ PlotGeometry SpectrumDisplay::getPlot() const
     area.removeFromBottom (axisBottom);
     area.removeFromLeft (axisLeft);
     area.removeFromRight (axisRight);
-    return { area };
+    return { area, viewShiftDb };
+}
+
+void SpectrumDisplay::setViewShift (float correctionDb)
+{
+    const auto clamped = juce::jlimit (PlotGeometry::minShiftDb, PlotGeometry::maxShiftDb, correctionDb);
+
+    if (juce::exactlyEqual (clamped, viewShiftDb))
+        return;
+
+    viewShiftDb = clamped;
+    repaint();
 }
 
 float SpectrumDisplay::interpolateAt (const std::vector<float>& values, float freq) const
@@ -224,14 +231,22 @@ void SpectrumDisplay::drawGrid (juce::Graphics& g, PlotGeometry plot, juce::Rect
     // the same eight, so a single set of lines serves both and the picture holds still
     // while the subject changes. PlotGeometry::gridDivisions is what keeps that true: change either
     // range without keeping them a 2:1 pair and the labels stop landing on the lines.
-    for (int i = 0; i <= PlotGeometry::gridDivisions; ++i)
-    {
-        const auto y = plot.getBottom() - (float) i / (float) PlotGeometry::gridDivisions * plot.getHeight();
+    //
+    // Placed by value rather than by fraction of the plot, so that when the view is slid
+    // the lines travel with the curves instead of standing still while the curves move
+    // past them. Every multiple of 6 dB of correction that is in view gets one.
+    const auto step = PlotGeometry::correctionStepDb;
+    const auto firstLine = (int) std::ceil (plot.correctionBottomDb() / step - 1.0e-3f);
+    const auto lastLine = (int) std::floor (plot.correctionTopDb() / step + 1.0e-3f);
 
-        // The middle is the correction's zero — no boost, no cut. Now that the
-        // correction is drawn on every tab, that line means something on every tab.
-        const auto centre = i * 2 == PlotGeometry::gridDivisions;
-        g.setColour (Theme::grid().withAlpha (centre ? 0.90f : 0.23f));
+    for (int i = firstLine; i <= lastLine; ++i)
+    {
+        const auto y = plot.correctionDbToY ((float) i * step);
+
+        // Zero is the correction's: no boost, no cut. Now that the correction is drawn
+        // on every tab, that line means something on every tab -- and it is the line
+        // that tells you where you are once the view has been moved.
+        g.setColour (Theme::grid().withAlpha (i == 0 ? 0.90f : 0.23f));
         hairline (plot.getX(), y, plot.getWidth(), 1.0f);
     }
 
@@ -260,23 +275,32 @@ void SpectrumDisplay::drawGrid (juce::Graphics& g, PlotGeometry plot, juce::Rect
 
     g.setColour (axisText);
 
-    // Down to -84 rather than the floor: the bottom gridline's label would sit in the
-    // corner the 20Hz caption is clamped into.
-    for (auto db : { 0.0f, -12.0f, -24.0f, -36.0f, -48.0f, -60.0f, -72.0f, -84.0f })
+    const auto signedDb = [] (int db)
     {
-        const auto y = plot.spectrumDbToY (db);
-        g.drawText (juce::String ((int) db),
-                    juce::Rectangle<float> (full.getX() + 2.0f, y - 7.0f, axisLeft - 8.0f, 14.0f),
-                    juce::Justification::centredRight);
-    }
+        return db == 0 ? juce::String ("0") : (db > 0 ? "+" : "") + juce::String (db);
+    };
 
-    for (auto db : { 24.0f, 12.0f, 0.0f, -12.0f, -24.0f })
+    for (int i = firstLine; i <= lastLine; ++i)
     {
-        const auto y = plot.correctionDbToY (db);
-        const auto text = db == 0.0f ? juce::String ("0") : (db > 0.0f ? "+" : "") + juce::String ((int) db);
-        g.drawText (text,
-                    juce::Rectangle<float> (plot.getRight() + 5.0f, y - 7.0f, axisRight - 7.0f, 14.0f),
-                    juce::Justification::centredLeft);
+        const auto correctionDb = (float) i * step;
+        const auto y = plot.correctionDbToY (correctionDb);
+
+        // The signal scale labels every line, down to the last one clear of the foot: a
+        // label on the bottom line would sit in the corner the 20Hz caption is clamped
+        // into.
+        if (y < plot.getBottom() - 7.0f)
+        {
+            const auto spectrumDb = juce::roundToInt (PlotGeometry::spectrumDbAtCorrection (correctionDb));
+            g.drawText (juce::String (spectrumDb),
+                        juce::Rectangle<float> (full.getX() + 2.0f, y - 7.0f, axisLeft - 8.0f, 14.0f),
+                        juce::Justification::centredRight);
+        }
+
+        // The correction's every other line, 12 dB apart.
+        if (i % 2 == 0)
+            g.drawText (signedDb (juce::roundToInt (correctionDb)),
+                        juce::Rectangle<float> (plot.getRight() + 5.0f, y - 7.0f, axisRight - 7.0f, 14.0f),
+                        juce::Justification::centredLeft);
     }
 
     // Name the units once, at the foot of each column, so the two scales can't be
@@ -624,13 +648,29 @@ void SpectrumDisplay::paint (juce::Graphics& g)
 
     drawGrid (g, plot, full);
 
+    // The curves are kept to the plot. Since the view can be slid, a curve can now run
+    // off the top of it, and is cut off there rather than drawn over the axis labels or
+    // pinned flat along the edge. Everything after the curves -- the band, the readout --
+    // stands outside this and may overlap the edge as it always has.
+    g.saveState();
+    g.reduceClipRegion (plot.bounds.getSmallestIntegerContainer());
+
     // The correction, faint, underneath everything, on the two tabs where it is not
     // the subject. It is the one thing the plugin is actually doing, and having it
     // vanish the moment you looked at either signal meant you could not see what you
     // had built while judging the material it was built from. Drawn before the
     // spectra so it reads as something behind them rather than over them.
     if (view != View::eqCurve)
+    {
         drawCorrection (g, plot, correctionLeft, Theme::correction().withAlpha (0.5f), false, 1.5f);
+
+        // And what Match would make of it, on top, at the same weight. This is where you
+        // are looking while a Learn runs -- pressing one brings its tab up -- so it is
+        // where the prediction can be watched settling as the take builds. A shade
+        // stronger than the violet, because it is the one that is moving.
+        if (drawsPrediction())
+            drawCorrection (g, plot, predictionLeft, Theme::stale().withAlpha (0.7f), false, 1.5f);
+    }
 
     // Every tab shows all three, so the picture stays a comparison rather than a
     // single curve on its own: the tab decides which one is the subject, and the
@@ -707,6 +747,8 @@ void SpectrumDisplay::paint (juce::Graphics& g)
             break;
     }
 
+    g.restoreState();
+
     drawBandShading (g, plot);
     drawReadout (g, plot);
 
@@ -748,12 +790,30 @@ void SpectrumDisplay::mouseDown (const juce::MouseEvent& event)
     if (dragging.has_value() && onBandGesture != nullptr)
         onBandGesture (*dragging, true);
 
+    // Anywhere else on the graph takes hold of the view itself, to slide it up or down.
+    // A band edge wins where the two meet: it is the smaller target, and the one you
+    // were aiming at if the pointer is that close to it.
+    if (! dragging.has_value() && getPlot().contains (event.position))
+    {
+        viewDragFrom = viewShiftDb;
+        setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
+    }
+
     repaint();
 }
 
 void SpectrumDisplay::mouseDrag (const juce::MouseEvent& event)
 {
     mousePosition = event.position;
+
+    if (viewDragFrom.has_value())
+    {
+        // Like taking hold of paper: drag down and the curves come down with the pointer,
+        // which brings the higher values into view.
+        const auto plot = getPlot();
+        setViewShift (*viewDragFrom + (float) event.getDistanceFromDragStartY() * plot.correctionDbPerPixel());
+        return;
+    }
 
     if (! dragging.has_value())
         return;
@@ -777,7 +837,32 @@ void SpectrumDisplay::mouseUp (const juce::MouseEvent& event)
     if (dragging.has_value() && onBandGesture != nullptr)
         onBandGesture (*dragging, false);
 
+    // Reported once the view has settled, not on every move: what listens to this
+    // writes it into the session.
+    if (viewDragFrom.has_value())
+    {
+        if (! juce::exactlyEqual (*viewDragFrom, viewShiftDb) && onViewShiftChanged != nullptr)
+            onViewShiftChanged (viewShiftDb);
+
+        viewDragFrom.reset();
+    }
+
     dragging.reset();
     hovered = handleAt (event.position);
+    setMouseCursor (hovered.has_value() ? juce::MouseCursor::LeftRightResizeCursor
+                                        : juce::MouseCursor::NormalCursor);
     repaint();
+}
+
+void SpectrumDisplay::mouseDoubleClick (const juce::MouseEvent& event)
+{
+    // Back to the window as designed. Not on a band edge, where a double-click is far
+    // more likely the second half of a fumbled grab than a request to reset the view.
+    if (handleAt (event.position).has_value() || juce::exactlyEqual (viewShiftDb, 0.0f))
+        return;
+
+    setViewShift (0.0f);
+
+    if (onViewShiftChanged != nullptr)
+        onViewShiftChanged (viewShiftDb);
 }
