@@ -24,6 +24,18 @@ namespace
         return freq >= 1000.0f ? juce::String (freq / 1000.0f, 2) + " kHz"
                                : juce::String ((int) freq) + " Hz";
     }
+
+    // The Predict button, as far in from the plot's right edge as it is from its top, so
+    // it sits square in the corner. Ten, because the band's high edge stands on that
+    // border with its grip at the top, and needs a clear run at it.
+    constexpr int predictWidth = 70;
+    constexpr int predictHeight = 22;
+    constexpr int predictInset = 10;
+
+    // The readout box's height, and how far below the plot's top its centre sits: on the
+    // button's own centre line, so the two line up when both are showing.
+    constexpr float readoutHeight = 20.0f;
+    constexpr float readoutCentre = (float) predictInset + (float) predictHeight * 0.5f;
 }
 
 SpectrumDisplay::SpectrumDisplay()
@@ -35,6 +47,64 @@ SpectrumDisplay::SpectrumDisplay()
     // drawing the graph itself costs. It is wasted on every frame and it competes
     // with layout during a resize drag, which is where it showed.
     setOpaque (true);
+
+    predictButton.setClickingTogglesState (true);
+    predictButton.setToggleState (true, juce::dontSendNotification);
+    predictButton.setWantsKeyboardFocus (false);
+    predictButton.setTooltip ("Draw, in orange, the curve Match would build from what has been "
+                              "learned since -- what pressing it will do, before you press it.");
+
+    predictButton.onClick = [this]
+    {
+        if (onPredictionShownChanged != nullptr)
+            onPredictionShownChanged (predictButton.getToggleState());
+
+        repaint();
+    };
+
+    applyColours();
+
+    // Hidden until the view it belongs to comes up -- see setView.
+    addChildComponent (predictButton);
+}
+
+void SpectrumDisplay::applyColours()
+{
+    // On, it wears the orange the curve it controls is drawn in -- the same tint the
+    // Match button takes when it is asking to be pressed, which is the same news. Off,
+    // it steps back to an ordinary control. Composited onto the graph's ground rather
+    // than left translucent, so the gridlines do not run through it.
+    const auto ground = Theme::background();
+    const auto orange = Theme::stale();
+
+    predictButton.setColour (juce::TextButton::buttonColourId, Theme::surface());
+    predictButton.setColour (juce::TextButton::buttonOnColourId, ground.overlaidWith (orange.withAlpha (0.24f)));
+    predictButton.setColour (juce::TextButton::textColourOffId, Theme::textDim());
+    predictButton.setColour (juce::TextButton::textColourOnId, orange.brighter (0.35f));
+}
+
+void SpectrumDisplay::setPrediction (const std::vector<float>& leftDb, const std::vector<float>& rightDb)
+{
+    predictionLeft = leftDb;
+    predictionRight = rightDb;
+}
+
+void SpectrumDisplay::setPredictionShown (bool shouldShow)
+{
+    if (predictButton.getToggleState() == shouldShow)
+        return;
+
+    predictButton.setToggleState (shouldShow, juce::dontSendNotification);
+    repaint();
+}
+
+void SpectrumDisplay::resized()
+{
+    const auto plot = getPlot().bounds;
+
+    predictButton.setBounds (juce::roundToInt (plot.getRight()) - predictInset - predictWidth,
+                             juce::roundToInt (plot.getY()) + predictInset,
+                             predictWidth, predictHeight);
 }
 
 Theme::Role SpectrumDisplay::roleFor (View v)
@@ -60,6 +130,7 @@ void SpectrumDisplay::setView (View newView)
         return;
 
     view = newView;
+    predictButton.setVisible (view == View::eqCurve);
     repaint();
 }
 
@@ -452,20 +523,29 @@ bool SpectrumDisplay::readoutValueAt (float freq, juce::String& text) const
 {
     if (showingCorrectionScale())
     {
-        if (correctionLeft.size() < 2)
+        const auto applied = correctionLeft.size() > 1;
+        const auto predicted = drawsPrediction();
+
+        if (! applied && ! predicted)
             return false;
 
-        const auto leftDb = interpolateAt (correctionLeft, freq) + correctionOffsetDb;
+        const auto at = [&] (const std::vector<float>& db)
+        {
+            return juce::String (interpolateAt (db, freq) + correctionOffsetDb, 1);
+        };
 
-        if (linked)
-        {
-            text << juce::String (leftDb, 1) << " dB";
-        }
+        // With both on screen, linked, the readout says where this frequency stands and
+        // where Match would move it. In words rather than with an arrow, which Jura does
+        // not have. Unlinked that would be four numbers, so it reports whichever curve
+        // is the one being looked at: the pending one if there is one.
+        if (linked && applied && predicted)
+            text << at (correctionLeft) << " dB   predicted " << at (predictionLeft) << " dB";
+        else if (linked)
+            text << at (predicted ? predictionLeft : correctionLeft) << " dB";
+        else if (predicted)
+            text << "L " << at (predictionLeft) << "   R " << at (predictionRight) << " dB";
         else
-        {
-            const auto rightDb = interpolateAt (correctionRight, freq) + correctionOffsetDb;
-            text << "L " << juce::String (leftDb, 1) << "   R " << juce::String (rightDb, 1) << " dB";
-        }
+            text << "L " << at (correctionLeft) << "   R " << at (correctionRight) << " dB";
 
         return true;
     }
@@ -503,10 +583,17 @@ void SpectrumDisplay::drawReadout (juce::Graphics& g, PlotGeometry area) const
 
     const auto font = Fonts::light (11.0f);
     const auto width = juce::GlyphArrangement::getStringWidth (font, text) + 16.0f;
-    const auto box = juce::Rectangle<float> (width, 20.0f)
+
+    // Kept clear of the Predict button when it is up, with the gap the button keeps
+    // from the plot's edge, rather than sliding underneath it.
+    const auto right = predictButton.isVisible()
+                           ? juce::jmax (area.getX() + width, (float) (predictButton.getX() - predictInset))
+                           : area.getRight();
+
+    const auto box = juce::Rectangle<float> (width, readoutHeight)
                          .withCentre ({ juce::jlimit (area.getX() + width * 0.5f,
-                                                      area.getRight() - width * 0.5f, x),
-                                        area.getY() + 14.0f });
+                                                      right - width * 0.5f, x),
+                                        area.getY() + readoutCentre });
 
     g.setColour (Theme::surface().withAlpha (0.94f));
     g.fillRoundedRectangle (box, 4.0f);
@@ -604,6 +691,19 @@ void SpectrumDisplay::paint (juce::Graphics& g)
             // Unlinked, the two channels genuinely differ, so both are worth seeing.
             if (! linked)
                 drawCorrection (g, plot, correctionRight, Theme::correction().withRotatedHue (0.08f), false);
+
+            // What Match would build, on top: it is the news. Filled only when there is
+            // nothing applied for it to be compared with -- two fills over one another
+            // muddy into a third colour that means neither.
+            if (drawsPrediction())
+            {
+                const auto alone = correctionLeft.size() < 2;
+
+                drawCorrection (g, plot, predictionLeft, Theme::stale(), alone);
+
+                if (! linked)
+                    drawCorrection (g, plot, predictionRight, Theme::stale().withRotatedHue (0.04f), false, 1.5f);
+            }
             break;
     }
 

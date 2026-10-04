@@ -1,5 +1,6 @@
 #pragma once
 
+#include <CelineUI/IconButton.h>
 #include <CelineUI/Theme.h>
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -46,6 +47,13 @@ public:
 
     juce::TextButton& getActionButton() noexcept { return action; }
 
+    /** Gives this tab a second, smaller button to the left of its action: one that
+        learns the stage from an audio file instead of from what is playing. */
+    void enableImport();
+
+    /** The button enableImport() added, or null on a tab without one. */
+    Celine::IconButton* getImportButton() noexcept { return importButton.get(); }
+
     /** The colours this takes once rather than reading as it draws. See Theme.h. */
     void applyColours();
     void lookAndFeelChanged() override { applyColours(); }
@@ -88,6 +96,12 @@ private:
 
     juce::TextButton action;
     const bool arms;
+
+    std::unique_ptr<Celine::IconButton> importButton;
+
+    // The left edge of whichever button stands furthest left, which is where the
+    // tab's own text has to stop.
+    int controlsLeft() const noexcept;
 
     // Which colour the action button wears. Held rather than read as it draws, the
     // way every other colour in here is, so a theme change goes through applyColours.

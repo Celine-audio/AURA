@@ -68,6 +68,10 @@ PluginProcessor::PluginProcessor()
 
 PluginProcessor::~PluginProcessor()
 {
+    // First, so a file being read stops at its next block instead of holding up the
+    // pool's destructor for the rest of the song.
+    stopImporting.store (true);
+
     for (auto* id : ParamID::filterShaping)
         apvts.removeParameterListener (id, this);
 
@@ -123,6 +127,63 @@ void PluginProcessor::timerCallback()
     // pushed has to leave the flag set for the next tick rather than be swallowed.
     if (settingsDirty.exchange (false))
         engine.setSettings (currentSettings());
+}
+
+void PluginProcessor::setCapturing (Side side, bool shouldCapture)
+{
+    // A Learn overtakes a file still being read for the same side: what the user asked
+    // for last wins, and that was the Learn.
+    if (shouldCapture)
+    {
+        ++importTickets[(size_t) side];
+
+        if (importingSide == side)
+            importingSide.reset();
+    }
+
+    engine.setCapturing (side, shouldCapture);
+}
+
+void PluginProcessor::importTakeFromFile (Side side, const juce::File& file,
+                                          std::function<void (const juce::Result&)> onFinished)
+{
+    // Stopped now rather than when the file lands, so the take being replaced does not
+    // go on learning in the meantime.
+    engine.setCapturing (side, false);
+
+    const auto ticket = ++importTickets[(size_t) side];
+    importingSide = side;
+
+    importPool.addJob ([this, weak = juce::WeakReference<PluginProcessor> (this), side, ticket, file,
+                        callback = std::move (onFinished)]
+    {
+        // Only stopImporting is touched from here: everything else on the processor is
+        // the message thread's, and the result goes back there to be used.
+        auto analysis = AudioFileSpectrum::analyse (file, &stopImporting);
+
+        juce::MessageManager::callAsync ([weak, side, ticket, callback, name = file.getFileName(),
+                                          result = std::move (analysis)]
+        {
+            if (auto* self = weak.get())
+                self->finishImport (side, ticket, name, result, callback);
+        });
+    });
+}
+
+void PluginProcessor::finishImport (Side side, std::uint32_t ticket, const juce::String& name,
+                                    AudioFileSpectrum::Result result,
+                                    const std::function<void (const juce::Result&)>& onFinished)
+{
+    if (ticket != importTickets[(size_t) side])
+        return;
+
+    importingSide.reset();
+
+    if (result.succeeded())
+        engine.importTake (side, std::move (result.magnitudes), result.sampleRate, name);
+
+    if (onFinished != nullptr)
+        onFinished (result.succeeded() ? juce::Result::ok() : juce::Result::fail (result.error));
 }
 
 void PluginProcessor::setUiActive (bool active)

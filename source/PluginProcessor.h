@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 
 #include "Parameters.h"
+#include "dsp/AudioFileSpectrum.h"
 #include "dsp/IrExport.h"
 #include "dsp/MatchEngine.h"
 #include "dsp/SpectrumAnalyzer.h"
@@ -23,6 +24,7 @@ class PluginProcessor : public juce::AudioProcessor,
 {
 public:
     using CorrectionCurves = MatchEngine::CorrectionCurves;
+    using Side = MatchEngine::Side;
 
     PluginProcessor();
     ~PluginProcessor() override;
@@ -59,9 +61,25 @@ public:
     // AURA control surface (called from the editor / message thread).
 
     /** Starts or stops a capture. Starting one always begins a fresh take: the
-        previous contents of that analyzer are discarded first. */
-    void setSourceCapturing (bool shouldCapture)    { engine.setCapturing (MatchEngine::Side::source, shouldCapture); }
-    void setReferenceCapturing (bool shouldCapture) { engine.setCapturing (MatchEngine::Side::reference, shouldCapture); }
+        previous contents of that analyzer are discarded first -- and so is a file
+        being read for that side, which the Learn has overtaken. */
+    void setCapturing (Side, bool shouldCapture);
+    void setSourceCapturing (bool shouldCapture)    { setCapturing (Side::source, shouldCapture); }
+    void setReferenceCapturing (bool shouldCapture) { setCapturing (Side::reference, shouldCapture); }
+
+    /** Learns a side's take from an audio file rather than from what is playing.
+
+        The file is read on a worker thread -- a song takes a moment to decode -- and
+        lands as that side's take on the message thread, after which `onFinished` is
+        called with how it went. It is not called at all if the read is overtaken: by a
+        Learn started on that side, by another file, or by the plugin closing. */
+    void importTakeFromFile (Side, const juce::File&, std::function<void (const juce::Result&)> onFinished);
+
+    /** True from importTakeFromFile() until the file has landed or been given up. */
+    bool isImportingTake (Side side) const noexcept { return importingSide == side; }
+
+    /** The file this side's take came from, or empty when it was learned. */
+    juce::String getImportedTakeName (Side side) const { return engine.getImportedTakeName (side); }
 
     bool isSourceCapturing() const noexcept    { return engine.isCapturing (MatchEngine::Side::source); }
     bool isReferenceCapturing() const noexcept { return engine.isCapturing (MatchEngine::Side::reference); }
@@ -118,6 +136,10 @@ public:
         has actually changed. This is the same data the convolution is built from, so
         the display tracks the knobs in lock-step with what you hear. */
     const CorrectionCurves& getCorrectionCurves() { return engine.getCorrectionCurves(); }
+
+    /** What pressing Match would build now, when that differs from what is applied:
+        before the first match, and once the match is out of date. Empty otherwise. */
+    const CorrectionCurves& getPredictedCurves() { return engine.getPredictedCurves(); }
 
     /** Flags the cached curves as out of date. The editor calls this while a capture
         is accumulating; parameter and match changes mark it internally. */
@@ -179,5 +201,26 @@ private:
     // Latched once the sidechain bus delivers a non-silent block; cleared on prepare.
     std::atomic<bool> sidechainCarriesSignal { false };
 
+    // A file being read for a side. Message thread only. The ticket is what tells a
+    // read that finishes from one that was overtaken while it ran: each new read and
+    // each Learn takes the next number, and a result carrying an old one is dropped.
+    void finishImport (Side, std::uint32_t ticket, const juce::String& name,
+                       AudioFileSpectrum::Result, const std::function<void (const juce::Result&)>& onFinished);
+
+    std::optional<Side> importingSide;
+    std::array<std::uint32_t, 2> importTickets {};
+
+    // Set as the plugin closes, so a read in progress gives its thread back at once
+    // rather than decoding the rest of a song nobody is waiting for.
+    std::atomic<bool> stopImporting { false };
+
+    // Declared last so it is destroyed first: the pool waits for a running read, and
+    // that read is still using stopImporting above.
+    juce::ThreadPool importPool { juce::ThreadPoolOptions{}.withThreadName ("AURA file import")
+                                                          .withNumberOfThreads (1) };
+
+    // A read finishes on a worker thread and comes back by message; the plugin may have
+    // been closed in between.
+    JUCE_DECLARE_WEAK_REFERENCEABLE (PluginProcessor)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
 };

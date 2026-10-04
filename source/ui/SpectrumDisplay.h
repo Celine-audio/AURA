@@ -24,6 +24,11 @@
     is the thing the plugin is doing and it is worth being able to see it while
     looking at the material it was derived from.
 
+    On the EQ Curve view it can also draw the prediction: the correction Match would
+    build from what has been learned since, in the out-of-date orange the Match button
+    wears to ask for pressing, so you can see what pressing it will do before you do.
+    The Predict button in the view's top right turns that on and off.
+
     All data is supplied from the message thread (the editor's timer). Spectra are
     linear magnitudes indexed by FFT bin (length == fftSize/2 + 1), on the analyzer's
     absolute scale where 1.0 is a full-scale sine; the correction curves are in dB
@@ -69,6 +74,18 @@ public:
     void setCorrection (const std::vector<float>& leftDb, const std::vector<float>& rightDb,
                         bool channelsAreLinked);
 
+    /** The correction Match would build now, when it differs from the applied one.
+        Same shape as setCorrection; pass empty curves when there is nothing pending. */
+    void setPrediction (const std::vector<float>& leftDb, const std::vector<float>& rightDb);
+
+    /** Whether the prediction is drawn, which is the Predict button's state. */
+    void setPredictionShown (bool shouldShow);
+    bool isPredictionShown() const noexcept { return predictButton.getToggleState(); }
+
+    /** Called when the Predict button is pressed, with its new state. The editor keeps
+        the choice with the session and asks for the prediction only while it is on. */
+    std::function<void (bool)> onPredictionShownChanged;
+
     /** How solidly each moving trace is drawn, 1 down to 0. The editor winds these
         down when its analyzer stops producing frames, so a stopped transport dissolves
         the live spectrum instead of leaving the last one standing there.
@@ -113,6 +130,11 @@ public:
     void setOverlayMessage (const juce::String& message);
 
     void paint (juce::Graphics&) override;
+    void resized() override;
+
+    /** The Predict button's colours, which a TextButton has to be told. */
+    void applyColours();
+    void lookAndFeelChanged() override { applyColours(); }
 
     void mouseMove (const juce::MouseEvent&) override;
     void mouseExit (const juce::MouseEvent&) override;
@@ -192,6 +214,17 @@ private:
 
     std::vector<float> liveCurrent, liveReference, learnedCurrent, learnedReference;
     std::vector<float> correctionLeft, correctionRight;
+    std::vector<float> predictionLeft, predictionRight;
+
+    // True when there is a prediction and it is wanted -- what decides whether it is
+    // drawn and whether the readout reports it.
+    bool drawsPrediction() const noexcept
+    {
+        return view == View::eqCurve && isPredictionShown() && predictionLeft.size() > 1;
+    }
+
+    // Top right of the plot, and only on the view it is about.
+    juce::TextButton predictButton { "Predict" };
     float correctionOffsetDb = 0.0f;
     bool linked = true;
 

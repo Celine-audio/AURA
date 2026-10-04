@@ -104,6 +104,12 @@ void MatchEngine::prepare (double newSampleRate, int maxBlockSize, int numChanne
         captureSampleRate = newSampleRate;
     }
 
+    // A take imported from a file is kept on whatever grid we were running at when it
+    // came in, so it moves with us -- the same mistake as above, otherwise.
+    for (auto* capture : { &source, &reference })
+        if (! capture->imported[0].empty())
+            rebaseSnapshot (capture->imported, sampleRate, newSampleRate);
+
     sampleRate = newSampleRate;
     numOutputChannels = juce::jmax (1, numChannels);
 
@@ -121,7 +127,7 @@ void MatchEngine::prepare (double newSampleRate, int maxBlockSize, int numChanne
 
     // The curves depend on the sample rate, so they have to be recomputed here, and
     // the convolution drops its impulse response on prepare().
-    correctionDirty.store (true);
+    markCorrectionDirty();
 
     if (matched.load())
     {
@@ -174,12 +180,42 @@ void MatchEngine::setCapturing (Side side, bool shouldCapture)
         // A new take, and numbered so it can be told from the last one even if it ends
         // up exactly as long.
         ++capture.generation;
+
+        // And it replaces a file as surely as it replaces the last Learn.
+        capture.imported = {};
+        capture.importedName = {};
     }
 
     for (auto& analyzer : capture.analyzer)
         analyzer.setCapturing (shouldCapture);
 
-    correctionDirty.store (true);
+    markCorrectionDirty();
+}
+
+void MatchEngine::importTake (Side side, Spectra magnitudes, double magnitudesSampleRate,
+                              const juce::String& name)
+{
+    if (magnitudes[0].size() < 2 || magnitudes[1].size() != magnitudes[0].size())
+        return;
+
+    auto& capture = captureFor (side);
+
+    // Stopped before it is cleared, so the audio thread is not still adding to the take
+    // being thrown away. reset() is safe from here whatever the audio thread is doing.
+    for (auto& analyzer : capture.analyzer)
+    {
+        analyzer.setCapturing (false);
+        analyzer.reset();
+    }
+
+    rebaseSnapshot (magnitudes, magnitudesSampleRate, sampleRate);
+
+    // A new take like any other, so a match taken before it reads as out of date.
+    ++capture.generation;
+    capture.imported = std::move (magnitudes);
+    capture.importedName = name;
+
+    markCorrectionDirty();
 }
 
 bool MatchEngine::isCapturing (Side side) const noexcept
@@ -210,9 +246,16 @@ bool MatchEngine::getLearnedMagnitudes (Side side, std::vector<float>& dest) con
 {
     const auto& capture = captureFor (side);
 
+    // A file first, as in takeFor: a Learn clears it, so while one is held it is the take.
+    const bool imported = ! capture.imported[0].empty();
+
     Spectra mags;
-    const bool live = capture.analyzer[0].getAveragedMagnitudes (mags[0])
-                   && capture.analyzer[1].getAveragedMagnitudes (mags[1]);
+    const bool live = imported
+                   || (capture.analyzer[0].getAveragedMagnitudes (mags[0])
+                       && capture.analyzer[1].getAveragedMagnitudes (mags[1]));
+
+    if (imported)
+        mags = capture.imported;
 
     if (! live)
     {
@@ -261,13 +304,23 @@ bool MatchEngine::collectCaptures (Spectra& sourceMags, Spectra& referenceMags) 
         return true;
     }
 
-    // Otherwise preview from whatever the analyzers hold right now.
-    for (size_t ch = 0; ch < sourceMags.size(); ++ch)
-        if (! source.analyzer[ch].getAveragedMagnitudes (sourceMags[ch])
-            || ! reference.analyzer[ch].getAveragedMagnitudes (referenceMags[ch]))
-            return false;
+    // Otherwise preview from whatever each side holds right now.
+    return takeFor (source, sourceMags) && takeFor (reference, referenceMags);
+}
 
-    return true;
+MatchEngine::CorrectionCurves MatchEngine::deriveCurves (const Spectra& sourceMags,
+                                                         const Spectra& referenceMags) const
+{
+    CorrectionCurves curves;
+
+    curves.leftDb  = FilterDesigner::computeCorrectionDb (sourceMags[0], referenceMags[0], sampleRate, settings.design);
+    curves.rightDb = FilterDesigner::computeCorrectionDb (sourceMags[1], referenceMags[1], sampleRate, settings.design);
+
+    // Link pulls the two channels towards their common average: 1 makes them
+    // identical (one shared curve), 0 leaves each channel to its own correction.
+    FilterDesigner::applyLink (curves.leftDb, curves.rightDb, settings.link);
+
+    return curves;
 }
 
 void MatchEngine::updateCorrectionCurves()
@@ -280,15 +333,7 @@ void MatchEngine::updateCorrectionCurves()
     if (! collectCaptures (sourceMags, referenceMags))
         return;
 
-    auto leftDb  = FilterDesigner::computeCorrectionDb (sourceMags[0], referenceMags[0], sampleRate, settings.design);
-    auto rightDb = FilterDesigner::computeCorrectionDb (sourceMags[1], referenceMags[1], sampleRate, settings.design);
-
-    // Link pulls the two channels towards their common average: 1 makes them
-    // identical (one shared curve), 0 leaves each channel to its own correction.
-    FilterDesigner::applyLink (leftDb, rightDb, settings.link);
-
-    correctionCache.leftDb = std::move (leftDb);
-    correctionCache.rightDb = std::move (rightDb);
+    correctionCache = deriveCurves (sourceMags, referenceMags);
 }
 
 const MatchEngine::CorrectionCurves& MatchEngine::getCorrectionCurves()
@@ -299,10 +344,37 @@ const MatchEngine::CorrectionCurves& MatchEngine::getCorrectionCurves()
     return correctionCache;
 }
 
+void MatchEngine::updatePredictedCurves()
+{
+    predictionCache = {};
+    predictionDirty.store (false);
+
+    // Nothing to predict while the captures still describe the match in force: the
+    // prediction would be the applied curve, drawn a second time on top of itself.
+    if (matched.load() && ! isMatchStale())
+        return;
+
+    // From exactly what performMatch() would snapshot, so this is what Match builds.
+    Spectra sourceMags, referenceMags;
+
+    if (! takeFor (source, sourceMags) || ! takeFor (reference, referenceMags))
+        return;
+
+    predictionCache = deriveCurves (sourceMags, referenceMags);
+}
+
+const MatchEngine::CorrectionCurves& MatchEngine::getPredictedCurves()
+{
+    if (predictionDirty.load())
+        updatePredictedCurves();
+
+    return predictionCache;
+}
+
 void MatchEngine::setSettings (const Settings& newSettings) noexcept
 {
     settings = newSettings;
-    correctionDirty.store (true);
+    markCorrectionDirty();
 
     // Straight to the throttle, because this is already the message thread -- see the
     // declaration for why it has to be.
@@ -409,6 +481,14 @@ bool MatchEngine::takeFor (const Capture& capture, Spectra& dest) const
     // looked broken: the button went half-lit the instant you pressed Learn and came up
     // again when audio arrived. A side that has been learned before is not empty; it is
     // holding what it learned last time until the new take replaces it.
+    //
+    // A file comes first. A Learn clears it, so while one is held it is the take.
+    if (! capture.imported[0].empty())
+    {
+        dest = capture.imported;
+        return true;
+    }
+
     if (capture.analyzer[0].getAveragedMagnitudes (dest[0])
         && capture.analyzer[1].getAveragedMagnitudes (dest[1]))
         return true;
@@ -447,7 +527,7 @@ bool MatchEngine::performMatch()
         capture->framesAtMatch = capture->analyzer[0].getFrameCount();
     }
 
-    correctionDirty.store (true);
+    markCorrectionDirty();
     rebuildMatch();
     return true;
 }
@@ -489,7 +569,7 @@ void MatchEngine::restoreFrom (const juce::XmlElement& element)
     rebaseSnapshot (reference.snapshot, captureSampleRate, sampleRate);
     captureSampleRate = sampleRate;
 
-    correctionDirty.store (true);
+    markCorrectionDirty();
 
     for (auto* capture : { &source, &reference })
     {
