@@ -24,6 +24,13 @@
     is the thing the plugin is doing and it is worth being able to see it while
     looking at the material it was derived from.
 
+    It can also draw the preview: the correction Match would build from what has
+    been learned since, in the out-of-date orange the Match button wears to ask for
+    pressing, so you can see what pressing it will do before you do. On every view, and
+    for the same reason the correction is: a Learn brings its own tab up, so the
+    preview moving as the take builds is only worth having if it is drawn there. The
+    Preview button in the view's top right turns it on and off.
+
     All data is supplied from the message thread (the editor's timer). Spectra are
     linear magnitudes indexed by FFT bin (length == fftSize/2 + 1), on the analyzer's
     absolute scale where 1.0 is a full-scale sine; the correction curves are in dB
@@ -69,13 +76,25 @@ public:
     void setCorrection (const std::vector<float>& leftDb, const std::vector<float>& rightDb,
                         bool channelsAreLinked);
 
+    /** The correction Match would build now, when it differs from the applied one.
+        Same shape as setCorrection; pass empty curves when there is nothing pending. */
+    void setPreview (const std::vector<float>& leftDb, const std::vector<float>& rightDb);
+
+    /** Whether the preview is drawn, which is the Preview button's state. */
+    void setPreviewShown (bool shouldShow);
+    bool isPreviewShown() const noexcept { return previewButton.getToggleState(); }
+
+    /** Called when the Preview button is pressed, with its new state. The editor keeps
+        the choice with the session and asks for the preview only while it is on. */
+    std::function<void (bool)> onPreviewShownChanged;
+
     /** How solidly each moving trace is drawn, 1 down to 0. The editor winds these
         down when its analyzer stops producing frames, so a stopped transport dissolves
         the live spectrum instead of leaving the last one standing there.
 
         Opacity rather than level: winding the magnitudes down instead just slides the
-        trace onto the dB floor, where the scale clamps it, and leaves a bright line
-        lying along the bottom of the graph that never goes away. */
+        trace down and out through the bottom of the graph, which reads as the signal
+        getting quieter rather than as the analyser having stopped. */
     void setLiveFade (float currentLevel, float referenceLevel) noexcept
     {
         liveCurrentFade = juce::jlimit (0.0f, 1.0f, currentLevel);
@@ -109,16 +128,33 @@ public:
         unrelated writes. Names the same edge onBandDragged will. */
     std::function<void (BandEdge, bool starting)> onBandGesture;
 
+    /** How far the view is slid up or down, in dB of correction -- see
+        PlotGeometry::shiftDb. Dragging the graph anywhere but on a band edge slides it,
+        keeping its span; a double-click puts it back. Clamped to the range PlotGeometry
+        allows. */
+    void setViewShift (float correctionDb);
+    float getViewShift() const noexcept { return viewShiftDb; }
+
+    /** Called when a drag or a double-click has moved the view, once it has settled
+        rather than on every mouse move. The editor keeps it with the session. */
+    std::function<void (float correctionDb)> onViewShiftChanged;
+
     /** Dims the whole view and says why, e.g. while the plugin is bypassed. */
     void setOverlayMessage (const juce::String& message);
 
     void paint (juce::Graphics&) override;
+    void resized() override;
+
+    /** The Preview button's colours, which a TextButton has to be told. */
+    void applyColours();
+    void lookAndFeelChanged() override { applyColours(); }
 
     void mouseMove (const juce::MouseEvent&) override;
     void mouseExit (const juce::MouseEvent&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
 
     /** The colour the given view is drawn in. Also used by the tab bar, so a tab
         matches the curve it selects.
@@ -192,6 +228,17 @@ private:
 
     std::vector<float> liveCurrent, liveReference, learnedCurrent, learnedReference;
     std::vector<float> correctionLeft, correctionRight;
+    std::vector<float> previewLeft, previewRight;
+
+    // True when there is a preview and it is wanted -- what decides whether it is
+    // drawn and whether the readout reports it.
+    bool drawsPreview() const noexcept
+    {
+        return isPreviewShown() && previewLeft.size() > 1;
+    }
+
+    // Top right of the plot, on every view, since the preview is drawn on every view.
+    juce::TextButton previewButton { "Preview" };
     float correctionOffsetDb = 0.0f;
     bool linked = true;
 
@@ -208,6 +255,12 @@ private:
     // Which edge is being dragged, and which one the pointer is merely over — the
     // second so a grip lights up before you commit to it.
     std::optional<BandEdge> dragging, hovered;
+
+    float viewShiftDb = 0.0f;
+
+    // Set while the view itself is being dragged: the shift it started from. Empty when
+    // the drag is a band edge's, or there is none.
+    std::optional<float> viewDragFrom;
 
     /** How close the pointer has to get, in pixels. Generous: the line itself is one
         pixel and nobody can hit that. */

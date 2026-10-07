@@ -167,6 +167,9 @@ TEST_CASE ("Sweeping a curve control does not click", "[convolver]")
 
     // The trim is ramped rather than rebuilt, so it is the control none of this ever
     // applied to -- it stands here as the floor the others are measured against.
+    //
+    // Over ±12 dB of its ±24. The ceiling is in the sine's own slope at unity, and at
+    // +24 dB the sine is sixteen times steeper on its own, click or no click.
     CHECK (worstJumpWhileSweeping (ParamID::outputGain, -12.0f, 12.0f) < ceiling);
 }
 

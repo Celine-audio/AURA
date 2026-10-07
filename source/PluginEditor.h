@@ -41,6 +41,10 @@ private:
     void showExportPanel();
     void chooseFileAndExport (IrExport::Options options);
 
+    // Learns a stage from an audio file: asks for one, then hands it to the processor,
+    // which reads it off the message thread.
+    void chooseFileToImport (PhaseTabBar::Stage stage);
+
     PluginProcessor& processorRef;
     PluginLookAndFeel lookAndFeel;
 

@@ -86,6 +86,19 @@ namespace
 
         return SpectrumDisplay::View::current;
     }
+
+    PluginProcessor::Side sideFor (PhaseTabBar::Stage stage)
+    {
+        return stage == PhaseTabBar::current ? PluginProcessor::Side::source
+                                             : PluginProcessor::Side::reference;
+    }
+
+    // Where the window keeps what it remembers about itself besides its size.
+    // Both are properties of the session rather than parameters: neither is something a
+    // host should automate.
+    const juce::Identifier previewProperty { "preview" };
+    const juce::Identifier importFolderProperty { "importFolder" };
+    const juce::Identifier viewShiftProperty { "viewShift" };
 }
 
 PluginEditor::PluginEditor (PluginProcessor& p)
@@ -101,8 +114,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     // rather than put on the desktop, so what shows through the corners is this window.
     tooltips.setOpaque (false);
 
-    display.setTooltip ("The signal, the reference and the correction between them. "
-                        "Drag the band edges to choose how much of the spectrum is matched.");
+    //display.setTooltip ("The signal, the reference and the correction between them. Drag the band edges to choose how much of the spectrum is matched.");
     addAndMakeVisible (display);
 
     tabBar.onSelectionChanged = [this] (PhaseTabBar::Stage stage)
@@ -119,6 +131,10 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     tabBar.getTab (PhaseTabBar::eqCurve).getActionButton().onClick =
         [this] { performMatch(); };
+
+    for (auto stage : { PhaseTabBar::current, PhaseTabBar::reference })
+        if (auto* import = tabBar.getTab (stage).getImportButton())
+            import->onClick = [this, stage] { chooseFileToImport (stage); };
 
     addAndMakeVisible (tabBar);
 
@@ -201,6 +217,22 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     const auto& state = processorRef.getAPVTS().state;
     const auto storedWidth = (int) state.getProperty ("uiWidth", defaultWidth);
     const auto storedHeight = (int) state.getProperty ("uiHeight", defaultHeight);
+
+    // On unless it was turned off: seeing what Match will do before doing it is the
+    // safer way to work, and the switch is right there for anyone who would rather not.
+    display.setPreviewShown ((bool) state.getProperty (previewProperty, true));
+    display.onPreviewShownChanged = [this] (bool shown)
+    {
+        processorRef.getAPVTS().state.setProperty (previewProperty, shown, nullptr);
+        refreshDisplay();
+    };
+
+    // Where the graph was last slid to, so reopening the window finds it there.
+    display.setViewShift ((float) state.getProperty (viewShiftProperty, 0.0f));
+    display.onViewShiftChanged = [this] (float shift)
+    {
+        processorRef.getAPVTS().state.setProperty (viewShiftProperty, shift, nullptr);
+    };
 
     // The second flag is the corner grip. With a fixed ratio below, that is the
     // only handle that means anything: dragging an edge would have to move the
@@ -296,13 +328,20 @@ void PluginEditor::refreshState()
     const auto srcFrames = processorRef.getSourceFrameCount();
     const auto refFrames = processorRef.getReferenceFrameCount();
 
-    // A stage that already holds a take says how much it learned; an empty one says
-    // what to do about it.
-    auto learnStatus = [&] (bool capturing, std::int64_t frames, const juce::String& what)
+    // A stage that already holds a take says how much it learned -- or, for one taken
+    // from a file, which file; an empty one says what to do about it.
+    auto learnStatus = [&] (PluginProcessor::Side side, bool capturing, std::int64_t frames,
+                            const juce::String& what)
     {
+        if (processorRef.isImportingTake (side))
+            return "Reading file" + ellipsis;
+
         if (capturing)
             return frames > 0 ? "Learning" + ellipsis + "  " + describeFrames (frames, sampleRate, fftSize)
                               : "Learning" + ellipsis;
+
+        if (const auto file = processorRef.getImportedTakeName (side); file.isNotEmpty())
+            return file;
 
         if (frames > 0)
             return describeFrames (frames, sampleRate, fftSize);
@@ -310,17 +349,35 @@ void PluginEditor::refreshState()
         return "Learn the " + what;
     };
 
+    const auto holdsTake = [this] (PluginProcessor::Side side, std::int64_t frames)
+    {
+        return frames > 0 || processorRef.getImportedTakeName (side).isNotEmpty();
+    };
+
     const auto sourceCapturing = processorRef.isSourceCapturing();
     const auto referenceCapturing = processorRef.isReferenceCapturing();
 
+    using Side = PluginProcessor::Side;
+
     auto& currentTab = tabBar.getTab (PhaseTabBar::current);
-    currentTab.setStatus (learnStatus (sourceCapturing, srcFrames, "input"), srcFrames > 0);
+    currentTab.setStatus (learnStatus (Side::source, sourceCapturing, srcFrames, "input"),
+                          holdsTake (Side::source, srcFrames));
     currentTab.setActionActive (sourceCapturing);
 
     const juce::String referenceHint = processorRef.isReferenceUsingSidechain() ? "sidechain" : "input";
     auto& referenceTab = tabBar.getTab (PhaseTabBar::reference);
-    referenceTab.setStatus (learnStatus (referenceCapturing, refFrames, referenceHint), refFrames > 0);
+    referenceTab.setStatus (learnStatus (Side::reference, referenceCapturing, refFrames, referenceHint),
+                            holdsTake (Side::reference, refFrames));
     referenceTab.setActionActive (referenceCapturing);
+
+    // One file at a time: a second chosen while the first is still being read would
+    // only overtake it.
+    const auto importing = processorRef.isImportingTake (Side::source)
+                        || processorRef.isImportingTake (Side::reference);
+
+    for (auto stage : { PhaseTabBar::current, PhaseTabBar::reference })
+        if (auto* import = tabBar.getTab (stage).getImportButton())
+            import->setEnabled (! importing);
 
     const auto matched = processorRef.isMatched();
 
@@ -403,8 +460,20 @@ void PluginEditor::refreshDisplay()
 
     const auto value = [&apvts] (const char* id) { return apvts.getRawParameterValue (id)->load(); };
 
+    // Violet is what the plugin is doing, so it is only drawn once a match is in
+    // force. Before that the engine still derives a curve from the captures, but it is
+    // a filter nobody is hearing yet: it is drawn as the preview, in the preview's
+    // colour.
+    static const PluginProcessor::CorrectionCurves noCurves;
+
     const auto& curves = processorRef.getCorrectionCurves();
-    display.setCorrection (curves.leftDb, curves.rightDb, value (ParamID::link) >= 0.999f);
+    const auto& applied = processorRef.isMatched() ? curves : noCurves;
+    display.setCorrection (applied.leftDb, applied.rightDb, value (ParamID::link) >= 0.999f);
+
+    // Only asked for while it is wanted: it is a second derivation of the curve, and
+    // while a capture runs it is re-derived every time the capture moves.
+    const auto& preview = display.isPreviewShown() ? processorRef.getPreviewCurves() : noCurves;
+    display.setPreview (preview.leftDb, preview.rightDb);
 
     display.setBand (value (ParamID::lowFreq), value (ParamID::highFreq));
 
@@ -414,11 +483,16 @@ void PluginEditor::refreshDisplay()
     // Only the EQ Curve tab needs an empty state: the two signal tabs have something
     // to show the moment audio is playing, match or no match.
     const auto bypassed = value (ParamID::bypass) > 0.5f;
-    const auto needsMatch = display.getView() == SpectrumDisplay::View::eqCurve && ! curves.isValid();
+    const auto needsMatch = display.getView() == SpectrumDisplay::View::eqCurve
+                         && ! applied.isValid() && ! preview.isValid();
 
-    display.setOverlayMessage (bypassed   ? "Bypassed"
-                             : needsMatch ? "Record a current and reference signal, then press Match"
-                                          : juce::String());
+    // With both takes in and Preview off there is a curve to build and nothing on screen
+    // to say so, so the empty state says it instead.
+    const auto emptyState = ! needsMatch           ? juce::String()
+                          : processorRef.canMatch() ? juce::String ("Press Match to apply the correction")
+                                                    : juce::String ("Record a current and reference signal, then press Match");
+
+    display.setOverlayMessage (bypassed ? juce::String ("Bypassed") : emptyState);
 
     display.repaint();
 }
@@ -571,6 +645,63 @@ void PluginEditor::chooseFileAndExport (IrExport::Options options)
                     .withAssociatedComponent (this),
                 nullptr);
         }
+
+        refreshState();
+    });
+}
+
+void PluginEditor::chooseFileToImport (PhaseTabBar::Stage stage)
+{
+    auto& state = processorRef.getAPVTS().state;
+
+    // The folder the last file came from, since references tend to live together; the
+    // music folder the first time, or if that folder has gone.
+    const juce::File remembered (state.getProperty (importFolderProperty).toString());
+    const auto start = remembered.isDirectory() ? remembered
+                                                : juce::File::getSpecialLocation (juce::File::userMusicDirectory);
+
+    fileChooser = std::make_unique<juce::FileChooser> ("Learn the " + juce::String (stage == PhaseTabBar::current ? "current signal" : "reference")
+                                                           + " from a file",
+                                                       start, AudioFileSpectrum::supportedWildcard());
+
+    const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+
+    fileChooser->launchAsync (flags, [this, stage] (const juce::FileChooser& chooser)
+    {
+        const auto file = chooser.getResult();
+
+        if (! file.existsAsFile())
+            return;
+
+        processorRef.getAPVTS().state.setProperty (importFolderProperty,
+                                                   file.getParentDirectory().getFullPathName(), nullptr);
+
+        // Brought up now, like a Learn, so "Reading file..." is said where you are looking.
+        tabBar.setSelected (stage);
+
+        // The processor can outlive this window, and the read can outlast it.
+        processorRef.importTakeFromFile (sideFor (stage), file,
+                                         [safe = juce::Component::SafePointer<PluginEditor> (this)] (const juce::Result& result)
+        {
+            if (safe == nullptr)
+                return;
+
+            // Like an export, only the failure is worth interrupting for: success shows
+            // as the file's name on the tab and its spectrum on the graph.
+            if (result.failed())
+            {
+                juce::NativeMessageBox::showAsync (
+                    juce::MessageBoxOptions()
+                        .withIconType (juce::MessageBoxIconType::WarningIcon)
+                        .withTitle ("Could not load the file")
+                        .withMessage (result.getErrorMessage())
+                        .withButton ("OK")
+                        .withAssociatedComponent (safe.getComponent()),
+                    nullptr);
+            }
+
+            safe->refreshState();
+        });
 
         refreshState();
     });

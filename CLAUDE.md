@@ -109,6 +109,22 @@ Conventions the kit relies on, all of them silent when broken:
   an opaque component must fill every pixel it owns, so the corners outside the
   rounding come out as square spikes of whatever was in the buffer.
 
+## Bypass
+
+**The host's bypass is the plugin's own** (`PluginProcessor::getBypassParameter`).
+Without it the host's button went through JUCE's default bypassed path, which neither
+moved the toolbar button, nor faded, nor delayed by the latency the plugin reports.
+
+It is a 30 ms crossfade (`source/dsp/BypassFade`) between the finished output and a copy
+of the input delayed by that latency — which in linear phase is half a filter, 85 ms —
+and **the correction keeps running while bypassed**. That looks like something to
+optimise; it is not. A convolution not fed while bypassed resumes from input a third of a
+second old, through up to 24 dB of boost, and came out as a burst ten times the level of
+the signal. The trim is not ramped to unity either: bypass takes it away by fading out
+the signal it is part of. `BypassFade.h` has the measurements, `tests/BypassTests.cpp`
+holds them, and it is the house bypass now — Céline and the template carry the same
+class, and GALLERY, which has no latency to match, the same fade written inline.
+
 ## Key configuration
 
 Edit `CMakeLists.txt` for `PROJECT_NAME`, `PRODUCT_NAME`, `COMPANY_NAME`, `BUNDLE_ID`,

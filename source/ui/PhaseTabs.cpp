@@ -12,6 +12,27 @@ namespace
     // to do, and they were sized like incidental toggles.
     constexpr int actionWidth = 88;
     constexpr int actionHeight = 30;
+
+    // Until the window is narrowed so far that the title starts to go: then the button
+    // gives way, down to this, so "Reference" is not traded for air inside "Learn".
+    constexpr int narrowActionWidth = 60;
+    constexpr int narrowTabWidth = 240;
+    constexpr int wideTabWidth = 340;
+
+    // The import button is square and as tall as the action beside it, so the pair
+    // read as one row of controls rather than a button and an afterthought.
+    constexpr int importSize = actionHeight;
+    constexpr int importGap = 6;
+
+    // Between the last line of the tab's text and the first of its buttons.
+    constexpr int textToControls = 10;
+
+    int actionWidthFor (int tabWidth) noexcept
+    {
+        const auto clamped = juce::jlimit (narrowTabWidth, wideTabWidth, tabWidth);
+        return juce::roundToInt (juce::jmap ((float) clamped, (float) narrowTabWidth, (float) wideTabWidth,
+                                             (float) narrowActionWidth, (float) actionWidth));
+    }
 }
 
 //==============================================================================
@@ -23,12 +44,31 @@ PhaseTab::PhaseTab (const juce::String& tabTitle, const juce::String& actionText
 
     // Said on the button rather than only in the tab's own status line, because the
     // button is what the pointer is over when the question comes up.
-    action.setTooltip (arms ? "Listen to what is playing and take its average spectrum. "
-                              "Press again to stop."
-                            : "Build the correction from the difference between the two "
-                              "learned spectra.");
+    action.setTooltip (arms ? "Record signal."
+                            : "Match the current signal to the reference.");
 
     addAndMakeVisible (action);
+}
+
+void PhaseTab::enableImport()
+{
+    if (importButton != nullptr)
+        return;
+
+    importButton = std::make_unique<Celine::IconButton> ("Load file", "file-import-solid-full.svg");
+
+    // A touch more air than the toolbar's: at thirty pixels, the toolbar's inset left
+    // the page heavier than the word in the button beside it.
+    importButton->setIconInset (0.22f);
+    importButton->setTooltip ("Import audio reference.");
+
+    addAndMakeVisible (*importButton);
+    resized();
+}
+
+int PhaseTab::controlsLeft() const noexcept
+{
+    return importButton != nullptr ? importButton->getX() : action.getX();
 }
 
 void PhaseTab::setEdges (bool isFirstTab, bool isLastTab)
@@ -200,7 +240,10 @@ void PhaseTab::paint (juce::Graphics& g)
 
     auto content = getLocalBounds().toFloat().reduced (0.0f, 6.0f);
     content.removeFromLeft (isFirst ? 12.0f : (float) chevronWidth + 10.0f);
-    content.removeFromRight ((float) actionWidth + 14.0f + (isLast ? 6.0f : (float) chevronWidth));
+
+    // Off the buttons themselves rather than off their sizes, so a tab with an extra
+    // one -- or a window narrow enough that they give way -- keeps the same margin.
+    content.setRight (juce::jmax (content.getX(), (float) (controlsLeft() - textToControls)));
 
     // State dot: red while capturing, the stage's own colour once it holds data.
     const auto dot = juce::Rectangle<float> (7.0f, 7.0f)
@@ -245,8 +288,15 @@ void PhaseTab::resized()
 
     auto area = getLocalBounds();
     area.removeFromRight (isLast ? 8 : chevronWidth + 4);
-    action.setBounds (area.removeFromRight (actionWidth)
-                          .withSizeKeepingCentre (actionWidth, actionHeight));
+
+    const auto width = actionWidthFor (getWidth());
+    action.setBounds (area.removeFromRight (width).withSizeKeepingCentre (width, actionHeight));
+
+    if (importButton != nullptr)
+    {
+        area.removeFromRight (importGap);
+        importButton->setBounds (area.removeFromRight (importSize).withSizeKeepingCentre (importSize, importSize));
+    }
 }
 
 void PhaseTab::mouseUp (const juce::MouseEvent& event)
@@ -289,12 +339,16 @@ PhaseTabBar::PhaseTabBar()
         addAndMakeVisible (tab);
     }
 
-    tabs[(size_t) current]->setTooltip ("The signal being corrected: what is playing "
-                                        "through the plugin now.");
-    tabs[(size_t) reference]->setTooltip ("The material being matched to: the sound the "
-                                          "correction is aiming at.");
-    tabs[(size_t) eqCurve]->setTooltip ("The correction itself -- the difference between "
-                                        "the two, which is what the plugin applies.");
+    //tabs[(size_t) current]->setTooltip ("Current signal.");
+    //tabs[(size_t) reference]->setTooltip ("Reference signal.");
+    //abs[(size_t) eqCurve]->setTooltip ("Matched curve.");
+
+    // Both signals can come from a file. The reference most often -- a finished track is
+    // exactly what people want to match to -- but the current too: a bounce of the mix
+    // being corrected learns as well as the mix playing does, and two files make a
+    // correction, and an impulse response, without the transport running at all.
+    tabs[(size_t) current]->enableImport();
+    tabs[(size_t) reference]->enableImport();
 
     tabs[(size_t) current]->setSelected (true);
 }

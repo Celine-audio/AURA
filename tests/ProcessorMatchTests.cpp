@@ -524,15 +524,22 @@ TEST_CASE ("A match keeps its frequencies when the sample rate changes", "[proce
     // shifts it by 8.8%, which is most of a semitone, and nothing says so.
     constexpr int fftBins = 4097;
 
-    // The frequency at which the correction first passes halfway to its peak. Read in
-    // hertz, not in bins, because bins are exactly what is not comparable here.
+    // The frequency at which the correction first passes halfway between where it
+    // stands at 200 Hz and where it stands at 10 kHz. Read in hertz, not in bins,
+    // because bins are exactly what is not comparable here.
+    //
+    // Anchored to two frequencies both rates have, not to the curve's peak, and not to
+    // its zero: the peak lives at the top of the spectrum, where 48k has a stretch above
+    // 22.05 kHz that 44.1k never captured, and the level the curve is centred on is
+    // measured from the whole band, so it moves with that stretch too.
     const auto crossoverHz = [] (const std::vector<float>& db, double rate)
     {
-        const auto peak = *std::max_element (db.begin(), db.end());
         const auto binHz = rate / (double) ((fftBins - 1) * 2);
+        const auto at = [&] (double hz) { return db[(size_t) std::round (hz / binHz)]; };
+        const auto halfway = 0.5f * (at (200.0) + at (10000.0));
 
-        for (size_t k = 1; k < db.size(); ++k)
-            if (db[k] >= peak * 0.5f)
+        for (auto k = (size_t) std::round (200.0 / binHz); k < db.size(); ++k)
+            if (db[k] >= halfway)
                 return (float) ((double) k * binHz);
 
         return 0.0f;
@@ -565,8 +572,11 @@ TEST_CASE ("A match keeps its frequencies when the sample rate changes", "[proce
 
     const auto at48 = crossoverHz (reopened.getCorrectionCurves().leftDb, 48000.0);
 
-    // Within 2%. Doing nothing about the rate change puts this out by 8.8%.
-    CHECK_THAT (at48, Catch::Matchers::WithinRel (at441, 0.02f));
+    // Within 4%. Doing nothing about the rate change puts this out by 8.8%. The two
+    // grids do not agree exactly even when the rebase is right -- the curve is smoothed
+    // on each, and differs by a few tenths of a dB -- and the crossover sits on a gentle
+    // slope, where that much moves it by up to 3%.
+    CHECK_THAT (at48, Catch::Matchers::WithinRel (at441, 0.04f));
 }
 
 TEST_CASE ("The plugin does not fade in when the host prepares it", "[processor]")

@@ -51,6 +51,9 @@ public:
     /** Which of the two captures an operation is about. */
     enum class Side { source, reference };
 
+    /** One magnitude spectrum per channel, left then right. */
+    using Spectra = std::array<std::vector<float>, 2>;
+
     MatchEngine();
     ~MatchEngine() override;
 
@@ -84,10 +87,23 @@ public:
     bool isCapturing (Side) const noexcept;
     std::int64_t getFrameCount (Side) const noexcept;
 
+    /** The spectra of an audio file, measured off the audio thread by AudioFileSpectrum,
+        put in as this side's take -- exactly as if a Learn had just finished on it.
+
+        Stops a Learn running on that side, and replaces its take: the file is the new
+        material, so a match in force goes out of date the way it would after a fresh
+        Learn. `magnitudesSampleRate` is the rate the file was measured at, which is
+        rarely ours -- see rebaseSnapshot. The name is only kept to be shown. */
+    void importTake (Side, Spectra magnitudes, double magnitudesSampleRate, const juce::String& name);
+
+    /** The name of the file this side's take came from, or empty when it was learned
+        from what was playing. A Learn started on that side clears it. */
+    juce::String getImportedTakeName (Side side) const { return captureFor (side).importedName; }
+
     /** The learned spectrum for one side, summed to a single curve for display.
-        Prefers whatever the capture analyzers hold and falls back to the snapshot the
-        committed match was taken from, which is all a reloaded session has. Returns
-        false when that side has never been learned. */
+        Prefers a take imported from a file, then whatever the capture analyzers hold,
+        and falls back to the snapshot the committed match was taken from, which is all
+        a reloaded session has. Returns false when that side has never been learned. */
     bool getLearnedMagnitudes (Side, std::vector<float>& dest) const;
 
     /** True once a match curve has been computed and loaded. */
@@ -114,9 +130,23 @@ public:
         display tracks the knobs in lock-step with what you hear. */
     const CorrectionCurves& getCorrectionCurves();
 
-    /** Flags the cached curves as out of date. Callers use this while a capture is
-        accumulating; setSettings and performMatch mark it internally. */
-    void markCorrectionDirty() noexcept { correctionDirty.store (true); }
+    /** The correction pressing Match would build right now, when that is not the one
+        in force: before the first match, and whenever the match is out of date. Empty
+        otherwise -- including while the captures still agree with the match, when it
+        would only be the applied curve drawn twice.
+
+        The same settings and the same derivation as getCorrectionCurves(), from the
+        spectra performMatch() would snapshot, so what it shows is what you get. */
+    const CorrectionCurves& getPreviewCurves();
+
+    /** Flags the cached curves -- applied and previewed -- as out of date. Callers use
+        this while a capture is accumulating; setSettings and performMatch mark it
+        internally. */
+    void markCorrectionDirty() noexcept
+    {
+        correctionDirty.store (true);
+        previewDirty.store (true);
+    }
 
     /** New curve-shaping settings. Marks the cache dirty and schedules a throttled
         rebuild of the impulse response.
@@ -159,14 +189,18 @@ private:
         is the difference between a rebuild costing thirty milliseconds and two. */
     FilterDesigner::IrBuilder irBuilder;
 
-    using Spectra = std::array<std::vector<float>, 2>;
-
     // Per-channel captures, so the correction can be derived independently for L and
     // R; the Link setting decides how much the two are averaged together.
     struct Capture
     {
         std::array<SpectrumAnalyzer, 2> analyzer;
         Spectra snapshot; // taken when Match was pressed
+
+        // A take measured from a file rather than learned from what was playing, on
+        // our bin grid. Message thread only: the audio thread never reads a take, it
+        // only feeds the analyzers. Cleared by the next Learn on this side.
+        Spectra imported;
+        juce::String importedName;
 
         // Which take this is, counting from the first Learn ever started on this side.
         // The frame count alone cannot say: start a fresh Learn, run it exactly as long
@@ -207,6 +241,12 @@ private:
     bool collectCaptures (Spectra& source, Spectra& reference) const;
 
     void updateCorrectionCurves();
+    void updatePreviewCurves();
+
+    // Derives a correction from two takes with the settings in force: per channel, then
+    // linked. The one place it is done, so the preview cannot drift from the curve
+    // it is a preview of.
+    CorrectionCurves deriveCurves (const Spectra& sourceMags, const Spectra& referenceMags) const;
 
     // Rebuilds the impulse response and loads it into the convolution. No-op if there
     // is nothing to match.
@@ -222,12 +262,13 @@ private:
 
     PartitionedConvolver convolution;
 
-    CorrectionCurves correctionCache;
+    CorrectionCurves correctionCache, previewCache;
 
     /** Message thread only -- see setSettings. */
     Settings settings;
 
     std::atomic<bool> correctionDirty { true };
+    std::atomic<bool> previewDirty { true };
     std::atomic<bool> matched { false };
 
     double sampleRate = 44100.0;

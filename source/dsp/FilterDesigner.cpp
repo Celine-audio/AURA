@@ -167,6 +167,58 @@ namespace FilterDesigner
         }
     }
 
+    float levelDifferenceDb (std::initializer_list<ChannelSpectra> channels, double sampleRate)
+    {
+        constexpr float epsilon = 1.0e-9f;
+
+        // The audible range, whatever the band is set to -- see the declaration.
+        constexpr auto low = (double) Params::noLowBound;
+        constexpr auto high = (double) Params::noHighBound;
+
+        std::vector<std::pair<float, double>> weighted;
+        auto total = 0.0;
+
+        for (const auto& channel : channels)
+        {
+            const auto numBins = std::min (channel.source.size(), channel.reference.size());
+
+            if (numBins < 2)
+                continue;
+
+            const auto binHz = sampleRate / (double) ((numBins - 1) * 2);
+
+            for (size_t k = 1; k < numBins; ++k)
+            {
+                const auto freq = (double) k * binHz;
+
+                if (freq < low || freq > high)
+                    continue;
+
+                const auto weight = binHz / freq;
+                weighted.emplace_back (linToDb ((channel.reference[k] + epsilon) / (channel.source[k] + epsilon)), weight);
+                total += weight;
+            }
+        }
+
+        if (weighted.empty())
+            return 0.0f;
+
+        std::sort (weighted.begin(), weighted.end(),
+                   [] (const auto& a, const auto& b) { return a.first < b.first; });
+
+        auto running = 0.0;
+
+        for (const auto& [db, weight] : weighted)
+        {
+            running += weight;
+
+            if (running >= total * 0.5)
+                return db;
+        }
+
+        return weighted.back().first;
+    }
+
     std::vector<float> computeCorrectionDb (const std::vector<float>& sourceMag,
                                             const std::vector<float>& referenceMag,
                                             double sampleRate,
@@ -183,7 +235,10 @@ namespace FilterDesigner
         for (size_t k = 0; k < numBins; ++k)
         {
             const auto ratio = (referenceMag[k] + epsilon) / (sourceMag[k] + epsilon);
-            auto db = linToDb (ratio);
+
+            // The level comes out before the clamp, so the ceiling is measured from where
+            // the curve actually sits rather than from where the loudness put it.
+            auto db = linToDb (ratio) - params.levelOffsetDb;
             db = std::clamp (db, -params.maxCutDb, params.maxBoostDb);
             correctionDb[k] = db * amount;
         }
