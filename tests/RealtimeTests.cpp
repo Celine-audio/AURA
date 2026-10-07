@@ -227,6 +227,24 @@ TEST_CASE ("The audio thread never reaches the allocator", "[realtime]")
         run (plugin, buffer, 64);
         CHECK (watch.count() == 0);
     }
+
+    SECTION ("while the bypass is fading")
+    {
+        run (plugin, buffer, 8);
+
+        // A block is shorter than BypassFade's 30 ms, so toggling every block keeps it
+        // moving -- the one state where the dry copy and the correction are both being
+        // blended per sample.
+        const Watch watch;
+
+        for (int i = 0; i < 32; ++i)
+        {
+            plugin.getAPVTS().getRawParameterValue (ParamID::bypass)->store ((float) (i % 2));
+            run (plugin, buffer, 1);
+        }
+
+        CHECK (watch.count() == 0);
+    }
 }
 
 //==============================================================================

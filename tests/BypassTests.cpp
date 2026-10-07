@@ -1,5 +1,7 @@
 #include "helpers/test_helpers.h"
 
+#include <CelineUI/IconButton.h>
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -221,3 +223,32 @@ TEST_CASE ("The host's bypass is the plugin's own", "[bypass]")
     CHECK (plugin.getBypassParameter() == plugin.getAPVTS().getParameter (ParamID::bypass));
 }
 
+TEST_CASE ("The bypass button follows a bypass pressed in the host", "[bypass][ui]")
+{
+    // The host's bypass is the plugin's own parameter, so pressing it there has to light
+    // the button here -- otherwise the toolbar says the correction is on while the host
+    // has switched it out. GALLERY's test, against this editor.
+    PluginProcessor plugin;
+    REQUIRE (plugin.getBypassParameter() != nullptr);
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor (plugin.createEditorAndMakeActive());
+    REQUIRE (editor != nullptr);
+
+    Celine::IconButton* bypass = nullptr;
+
+    for (auto* child : editor->getChildren())
+        if (auto* button = dynamic_cast<Celine::IconButton*> (child); button != nullptr && button->getName() == "Bypass")
+            bypass = button;
+
+    REQUIRE (bypass != nullptr);
+    REQUIRE_FALSE (bypass->isActive());
+
+    plugin.getBypassParameter()->setValueNotifyingHost (1.0f);
+    CHECK (bypass->getToggleState());
+    CHECK (bypass->isActive());
+
+    plugin.getBypassParameter()->setValueNotifyingHost (0.0f);
+    CHECK_FALSE (bypass->isActive());
+
+    plugin.editorBeingDeleted (editor.get());
+}
