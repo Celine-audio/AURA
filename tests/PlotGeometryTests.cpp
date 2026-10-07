@@ -30,10 +30,12 @@ TEST_CASE ("Shifting the plot slides both scales and keeps their span", "[plot]"
     CHECK_THAT (plot.spectrumDbToY (-48.0f), WithinAbs (0.0f, 1.0e-4f));
     CHECK_THAT (plot.spectrumDbToY (-144.0f), WithinAbs (480.0f, 1.0e-4f));
 
-    // Below the window is held at the floor, as it always was; above it runs off the top,
-    // where the display clips it, rather than lying flat along the edge.
-    CHECK_THAT (plot.correctionDbToY (-60.0f), WithinAbs (480.0f, 1.0e-4f));
+    // Out of view either way runs off that edge, where the display clips it, rather than
+    // lying flat along it.
+    CHECK (plot.correctionDbToY (-60.0f) > 480.0f);
     CHECK (plot.correctionDbToY (12.0f) < 0.0f);
+    CHECK (plot.spectrumDbToY (-160.0f) > 480.0f);
+    CHECK (plot.spectrumDbToY (-30.0f) < 0.0f);
 }
 
 TEST_CASE ("The two scales still share their gridlines however far the plot is slid", "[plot]")

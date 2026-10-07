@@ -329,7 +329,7 @@ juce::Path SpectrumDisplay::buildCurvePath (PlotGeometry area, const std::vector
         return path;
 
     // Absolute: no peak normalisation anywhere in here. A trace that fades out sinks
-    // to the floor instead of being re-scaled back up into view.
+    // out of view instead of being re-scaled back up into it.
     auto yFor = [&] (int k)
     {
         return scale == Scale::spectrum
@@ -648,10 +648,11 @@ void SpectrumDisplay::paint (juce::Graphics& g)
 
     drawGrid (g, plot, full);
 
-    // The curves are kept to the plot. Since the view can be slid, a curve can now run
-    // off the top of it, and is cut off there rather than drawn over the axis labels or
-    // pinned flat along the edge. Everything after the curves -- the band, the readout --
-    // stands outside this and may overlap the edge as it always has.
+    // The curves are kept to the plot. A curve that runs off the top or the bottom of
+    // the view -- louder than the window, or quieter, or a cut deeper than it -- is cut
+    // off at that edge rather than drawn over the axis labels or pinned flat along it.
+    // Everything after the curves -- the band, the readout -- stands outside this and
+    // may overlap the edge as it always has.
     g.saveState();
     g.reduceClipRegion (plot.bounds.getSmallestIntegerContainer());
 

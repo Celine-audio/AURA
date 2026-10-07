@@ -93,8 +93,8 @@ public:
         the live spectrum instead of leaving the last one standing there.
 
         Opacity rather than level: winding the magnitudes down instead just slides the
-        trace onto the dB floor, where the scale clamps it, and leaves a bright line
-        lying along the bottom of the graph that never goes away. */
+        trace down and out through the bottom of the graph, which reads as the signal
+        getting quieter rather than as the analyser having stopped. */
     void setLiveFade (float currentLevel, float referenceLevel) noexcept
     {
         liveCurrentFade = juce::jlimit (0.0f, 1.0f, currentLevel);

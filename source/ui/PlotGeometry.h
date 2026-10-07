@@ -101,21 +101,20 @@ struct PlotGeometry
                                      / (2.0f * correctionRangeDb);
     }
 
-    // Held at the floor, so a quiet trace or a deep cut lies along the bottom saying
-    // there is more below -- but not at the ceiling. Before the view could move, nothing
-    // reached the top; now that sliding it down puts the loud part of a curve above the
-    // window, holding it to the edge drew a flat line there that looked like part of the
-    // picture. Above, it is left to run off, and the display clips it to the plot.
+    // Not held to either edge. A value outside the window maps outside the plot, and the
+    // display clips every curve to the plot, so a curve leaving the view is cut off at
+    // the edge it leaves by, top or bottom alike. Holding it to the floor, as this once
+    // did, drew a flat line along the bottom wherever a trace was quieter than the
+    // window or a cut deeper than it -- a line that looked like part of the picture, and
+    // that the top edge, which had already stopped doing it, no longer drew.
     float correctionDbToY (float db) const noexcept
     {
-        const auto clamped = juce::jmax (correctionBottomDb(), db);
-        return proportionToY ((clamped - correctionBottomDb()) / (2.0f * correctionRangeDb));
+        return proportionToY ((db - correctionBottomDb()) / (2.0f * correctionRangeDb));
     }
 
     float spectrumDbToY (float db) const noexcept
     {
-        const auto clamped = juce::jmax (spectrumBottomDb(), db);
-        return proportionToY ((clamped - spectrumBottomDb()) / (spectrumTopDb - spectrumFloorDb));
+        return proportionToY ((db - spectrumBottomDb()) / (spectrumTopDb - spectrumFloorDb));
     }
 
     /** How many dB of correction a vertical distance on screen spans, for dragging. */
