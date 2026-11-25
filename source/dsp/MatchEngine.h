@@ -116,6 +116,47 @@ public:
         ones the stored match was built from. */
     bool isMatchStale() const noexcept;
 
+    //==============================================================================
+    // Running.
+    //
+    // A take normally grows for as long as its Learn runs, and every second of it
+    // counts as much as the first. Running makes a take the last few seconds instead --
+    // a window that slides along with the music -- and keeps a match in force following
+    // it, re-matching on its own a few times a second, so the correction tracks what is
+    // playing now rather than an average of everything that was played.
+    //
+    // Running never makes the first match: Match is still what puts a correction on the
+    // signal, and Running is what keeps it current afterwards. Turning it on with no
+    // match in force changes what the takes describe and nothing you hear.
+
+    /** The longest window offered, and therefore how much history each capture keeps. */
+    static constexpr double maxRunningWindowSeconds = 30.0;
+
+    /** How finely the window is cut. See SpectrumAnalyzer's rolling history. */
+    static constexpr double runningSegmentSeconds = 0.25;
+
+    /** How often a running match is rebuilt at most. Every analyzer frame would be
+        twenty-odd rebuilds a second for a curve that moves by a quarter-second's worth
+        of audio between them; this keeps the message thread's share to a few ms a
+        second and is still faster than anyone hears an EQ move. */
+    static constexpr juce::uint32 runningUpdateIntervalMs = 250;
+
+    /** Turns Running on or off and sets the window it reads, in seconds. Message thread.
+        Both are kept across prepare(), so a change of sample rate re-cuts the window
+        rather than losing it. */
+    void setRunning (bool shouldRun, double windowSeconds);
+    bool isRunning() const noexcept { return running; }
+    double getRunningWindowSeconds() const noexcept { return runningWindowSeconds; }
+
+    /** How many frames one side's take is over right now -- the window's worth at most
+        while Running, all of them otherwise. */
+    std::int64_t getWindowedFrameCount (Side) const;
+
+    /** Message thread, called on a timer. While Running with a match in force and the
+        takes moved on from it, rebuilds the match from them -- at most once every
+        runningUpdateIntervalMs. Returns true when it did. */
+    bool updateRunningMatch();
+
     /** Snapshots both captures and builds the filter from them. Returns false if
         either side is empty -- meaning it holds neither a take being learned now nor
         one committed before. */
@@ -281,6 +322,19 @@ private:
     // When the convolution last took a new impulse response, for the rebuild throttle.
     juce::uint32 lastRebuildMs = 0;
     int rebuildCount = 0;
+
+    // Running. The window is held in seconds and re-cut into segments by applyWindow()
+    // whenever the rate or the setting changes.
+    void applyWindow();
+    bool running = false;
+    double runningWindowSeconds = 5.0;
+    juce::uint32 lastRunningMatchMs = 0;
+
+    // A take read through a window changes when the window does, with no frame arriving
+    // and no Learn started -- so neither of the things isMatchStale() watches would see
+    // it. This is the third: bumped whenever a window change alters a learned take.
+    std::int64_t windowRevision = 0;
+    std::int64_t windowRevisionAtMatch = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MatchEngine)
 };

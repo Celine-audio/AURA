@@ -59,8 +59,12 @@ PluginProcessor::PluginProcessor()
 
     engine.onLatencyChanged = [this] (int samples) { setLatencySamples (samples); };
     engine.setSettings (currentSettings());
+    pushRunning();
 
     for (auto* id : ParamID::filterShaping)
+        apvts.addParameterListener (id, this);
+
+    for (auto* id : ParamID::runningControls)
         apvts.addParameterListener (id, this);
 
     startTimer (settingsPollMs);
@@ -73,6 +77,9 @@ PluginProcessor::~PluginProcessor()
     stopImporting.store (true);
 
     for (auto* id : ParamID::filterShaping)
+        apvts.removeParameterListener (id, this);
+
+    for (auto* id : ParamID::runningControls)
         apvts.removeParameterListener (id, this);
 
     // It can be mid-flight when a host closes the plugin, and it calls back into
@@ -98,8 +105,27 @@ MatchEngine::Settings PluginProcessor::currentSettings() const
     return settings;
 }
 
-void PluginProcessor::parameterChanged (const juce::String&, float)
+void PluginProcessor::pushRunning()
 {
+    engine.setRunning (apvts.getRawParameterValue (ParamID::running)->load() > 0.5f,
+                       (double) apvts.getRawParameterValue (ParamID::window)->load());
+}
+
+void PluginProcessor::parameterChanged (const juce::String& parameterID, float)
+{
+    // The same rule for Running and its window, by a path of their own: they change what
+    // a take is, not the curve's shape, and pushing the settings for them would rebuild
+    // a filter nothing has changed.
+    if (parameterID == ParamID::running || parameterID == ParamID::window)
+    {
+        if (juce::MessageManager::existsAndIsCurrentThread())
+            pushRunning();
+        else
+            runningDirty.store (true);
+
+        return;
+    }
+
     // Called on whichever thread moved the parameter, and which one that is decides
     // what may be done about it.
     //
@@ -127,6 +153,14 @@ void PluginProcessor::timerCallback()
     // pushed has to leave the flag set for the next tick rather than be swallowed.
     if (settingsDirty.exchange (false))
         engine.setSettings (currentSettings());
+
+    if (runningDirty.exchange (false))
+        pushRunning();
+
+    // Here rather than in the editor, so a running match keeps following with the
+    // window closed -- which is most of the time it spends running. The engine throttles
+    // it, and it returns at once unless Running is on with a match out of date.
+    engine.updateRunningMatch();
 }
 
 void PluginProcessor::setCapturing (Side side, bool shouldCapture)
@@ -453,6 +487,7 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     apvts.replaceState (juce::ValueTree::fromXml (*xml));
     engine.setSettings (currentSettings());
+    pushRunning();
 
     if (match != nullptr)
         engine.restoreFrom (*match);

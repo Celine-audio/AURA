@@ -125,6 +125,85 @@ the signal it is part of. `BypassFade.h` has the measurements, `tests/BypassTest
 holds them, and it is the house bypass now — Céline and the template carry the same
 class, and GALLERY, which has no latency to match, the same fade written inline.
 
+## Running
+
+**Running** (`ParamID::running`, with `ParamID::window` for how many seconds, 1–30)
+makes each learned take only the last few seconds rather than everything since Learn
+was pressed, and keeps a match in force following it. Its control is `WindowStepper`
+(`source/ui/`), in the middle of the bottom band between Smoothing and L/R Link: the word
+WINDOW is the switch, lit violet while Running is on, and beside it a "− 5.0 s +"
+stepper sets the length -- half-second steps up to ten seconds, whole ones past it, a
+held button repeats, a double-click on the readout types a value. The stepper stays
+usable, dimmed, while Running is off.
+
+Three settings on one band are what set the editor's **minimum width, 1000 px**: below
+that Smoothing and L/R Link have no track left to drag. `SliderRowControl::resized()`
+gives up the name column's spare room and then readout width before the track shrinks.
+
+- **The window is read, not recorded.** Every capture analyzer keeps, beside its
+  long-term sum, a ring of quarter-second segments of the same power
+  (`SpectrumAnalyzer::prepareHistory`), sized in `MatchEngine::prepare` for the longest
+  window. Running only changes how many of the newest segments the average reads
+  (`setWindowSegments`), so turning it on mid-take or moving the window loses nothing.
+  The ring is reallocated only when the sample rate changes the cut.
+- **Running never makes the first match.** Match still commits a correction;
+  `MatchEngine::updateRunningMatch()` then rebuilds it from the takes whenever they have
+  moved on, at most every `runningUpdateIntervalMs` (250 ms). It is driven from the
+  processor's timer, not the editor's, so it keeps following with the window closed.
+- **A window change is a change of take.** No frame arrives and no Learn starts, so
+  `isMatchStale()` also watches `windowRevision`.
+- While Running with a match in force, the EQ tab says "Match running" instead of
+  "out of date", and no preview is drawn: the match is about to become it.
+
+`tests/RunningTests.cpp` holds all of this.
+
+## Update checks
+
+Céline's mechanism, carried over (`source/UpdateCheck.h`). It asks GitHub's
+`releases/latest` for the repository in `ProductInfo::repositoryUrl` whether a newer
+AURA is out. **Off until the user says yes**: the first time a window is on screen they
+are asked once, closing the question is a no, and the settings menu has "Check for
+updates at launch". The answer is per machine, in `<company folder>/AURA.settings`, with
+the same keys Céline uses. **One request per process, at most**, on a background thread
+with a 5 s timeout (on Linux through curl, `NEEDS_CURL`, and `libcurl4-openssl-dev` in
+the Linux CI), never retried. **Only a strictly newer version counts**, compared as
+numbers, and an unreadable one never does. Download opens the releases page. The tests
+never touch the network: a test editor is never on screen, so it never starts the check.
+
+## Releases
+
+`.github/workflows/release.yml` builds on all three platforms and attaches one zip per
+platform to the GitHub release, plus a **macOS disk image** and a **Windows installer**,
+the way Céline does. Triggered by pushing a `v*` tag; `workflow_dispatch` produces the
+same files without making a release.
+
+Every archive holds VST3, CLAP and LV2, plus AU on macOS (universal). **The AAX is built
+but shipped nowhere**: it needs Avid's PACE signature to load, and there is no licence to
+sign it with. It stays in `FORMATS` so it keeps compiling; the zips exclude `AAX/`, and
+the disk image and the installer never list it. Nothing is code signed, so Gatekeeper
+and SmartScreen will warn.
+
+- **The disk image** (`packaging/dmg/settings.py`, built by a pinned `dmgbuild` in
+  `macos.yml`) is a drag-and-drop window: one row per format, the bundle on the left and
+  a shortcut to the system-wide folder it installs into on the right. Finder takes the
+  window size as the whole frame, title bar included, and shows the user's own tab, path
+  and status bars in it, so the layout leaves room for all of them. `CLAP` and `LV2` do
+  not exist on a Mac until something has installed into them, so on a fresh machine
+  those two shortcuts lead nowhere.
+- **The installer** (`packaging/installer.iss`, Inno Setup in `windows.yml`) puts the
+  plugins in Common Files' `VST3`, `CLAP` and `LV2`, each format a component, all ticked.
+  Its license page is `COPYING`. **Its `AppId` must never change**, and is AURA's own: it
+  is how Windows knows a new version replaces an old one, and sharing Céline's would make
+  each plugin's installer think it was upgrading the other.
+- **The artwork** for both is drawn by `packaging/make-artwork.swift`, which is GALLERY's
+  script so the house's installers share one identity: the product's wordmark alone in
+  the header, the same tiles, arrows and type, and the wizard's icon, arrow and wordmark.
+  Only the ground is AURA's own, the graph's gridlines where Céline and GALLERY draw the
+  schematic's dots. It is drawn from the wordmark, the app icon, the Jura fonts and the
+  theme's colours, and committed. Run
+  `swift packaging/make-artwork.swift` from the root after changing any of those. The
+  DMG's rows are written in both that script and `settings.py`, and must agree.
+
 ## Key configuration
 
 Edit `CMakeLists.txt` for `PROJECT_NAME`, `PRODUCT_NAME`, `COMPANY_NAME`, `BUNDLE_ID`,

@@ -11,6 +11,7 @@
 #include "ui/PhaseTabs.h"
 #include <CelineUI/IconButton.h>
 #include "ui/SpectrumDisplay.h"
+#include "ui/WindowStepper.h"
 
 //==============================================================================
 class PluginEditor : public juce::AudioProcessorEditor,
@@ -37,6 +38,28 @@ private:
 
     // The licence notice, which inside a host is the only route to it.
     void showSettingsMenu();
+
+    // Update checks, Céline's mechanism -- see UpdateCheck.h.
+
+    /** Asks once per machine whether to check for updates. Closing the question means no. */
+    void offerUpdateChecksOnFirstRun();
+
+    /** Starts this launch's one check, if the user wants checks and none has started. */
+    void startUpdateCheckIfEnabled();
+
+    /** "A new update is available": Download, Remind me later, or turn checks off. */
+    void announceUpdate (const juce::String& version);
+
+    /** Puts a themed question up in a window of its own, asynchronously -- never a
+        modal loop inside a host -- and remembers it as openPrompt. */
+    juce::DialogWindow* launchPrompt (const juce::String& title, std::unique_ptr<juce::Component> content);
+
+    /** Whether this window has asked its first-run question yet. Asked from the timer,
+        once the window is actually on screen in front of somebody. */
+    bool updateQuestionChecked = false;
+
+    /** The question this window has up, if any; one at a time. Null once answered. */
+    juce::Component::SafePointer<juce::DialogWindow> openPrompt;
 
     void showExportPanel();
     void chooseFileAndExport (IrExport::Options options);
@@ -122,6 +145,11 @@ private:
     SliderRowControl linkRow      { processorRef.getAPVTS(), ParamID::link,      "L/R Link" };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
+
+    // Running, and how many seconds back it reads: the word WINDOW switches it on, and
+    // a stepper beside it sets the length. In the middle of the bottom band, between the
+    // two settings that shape the curve, since it decides what the curve is made from.
+    WindowStepper windowControl { processorRef.getAPVTS(), ParamID::running, ParamID::window };
 
     // Bypass reads its state back out of the parameter rather than out of the
     // button, so the icon's red fill follows automation as well as clicks.

@@ -79,8 +79,39 @@ void SliderRowControl::resized()
 {
     auto area = getLocalBounds();
 
-    rowName.setBounds (area.removeFromLeft (nameWidth));
-    area.removeFromLeft (10);
+    // The name's column and the readout are sized for the widest row; on a band that
+    // has to hold three settings at a narrow window, the track is what would pay for
+    // that. So when the track would come out shorter than it can be dragged, the name
+    // column gives up the room its own word does not need, then the readout down to
+    // what a value actually takes -- and only then does the track get shorter.
+    constexpr int nameGap = 10;
+    // The slider's own box rather than the line drawn in it: the thumb's travel stops
+    // its radius short of either end, so this is about eighty pixels of visible track.
+    constexpr int shortestTrack = 110;
+    constexpr int narrowestReadout = 44;
+
+    auto name = nameWidth;
+    auto value = valueWidth;
+    auto shortfall = name + nameGap + value + shortestTrack - area.getWidth();
+
+    if (shortfall > 0)
+    {
+        const auto ownWidth = juce::GlyphArrangement::getStringWidthInt (rowName.getFont(), rowName.getText()) + 4;
+        const auto spareName = juce::jmax (0, name - ownWidth);
+        const auto fromName = juce::jmin (shortfall, spareName);
+
+        name -= fromName;
+        shortfall -= fromName;
+    }
+
+    if (shortfall > 0)
+        value = juce::jmax (narrowestReadout, value - shortfall);
+
+    if (slider.getTextBoxWidth() != value)
+        slider.setTextBoxStyle (juce::Slider::TextBoxRight, false, value, 18);
+
+    rowName.setBounds (area.removeFromLeft (name));
+    area.removeFromLeft (nameGap);
 
     slider.setBounds (area);
 }

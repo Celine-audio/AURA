@@ -122,6 +122,26 @@ void MatchEngine::prepare (double newSampleRate, int maxBlockSize, int numChanne
 
     juce::ignoreUnused (maxBlockSize);
 
+    // The rolling history, cut into segments of about a quarter-second at this rate.
+    // Only reallocated when the cut changes: a host that calls prepare on every
+    // transport start must not take a stopped take's history with it.
+    {
+        const auto hop = (double) (getFftSize() / 2);
+        const auto framesPerSegment = juce::jmax (1, juce::roundToInt (runningSegmentSeconds * sampleRate / hop));
+        const auto segmentSeconds = (double) framesPerSegment * hop / sampleRate;
+
+        // The head, which is still filling, plus enough whole segments behind it for
+        // the longest window.
+        const auto segments = (int) std::ceil (maxRunningWindowSeconds / segmentSeconds) + 1;
+
+        for (auto* capture : { &source, &reference })
+            for (auto& analyzer : capture->analyzer)
+                if (analyzer.getFramesPerSegment() != framesPerSegment || analyzer.getHistoryCapacity() != segments)
+                    analyzer.prepareHistory (framesPerSegment, segments);
+
+        applyWindow();
+    }
+
     convolution.prepare (numOutputChannels, irLength);
     convolution.reset();
 
@@ -239,7 +259,7 @@ bool MatchEngine::isMatchStale() const noexcept
             || capture.analyzer[0].getFrameCount() != capture.framesAtMatch;
     };
 
-    return movedOn (source) || movedOn (reference);
+    return movedOn (source) || movedOn (reference) || windowRevision != windowRevisionAtMatch;
 }
 
 bool MatchEngine::getLearnedMagnitudes (Side side, std::vector<float>& dest) const
@@ -360,7 +380,11 @@ void MatchEngine::updatePreviewCurves()
 
     // Nothing to preview while the captures still describe the match in force: the
     // preview would be the applied curve, drawn a second time on top of itself.
-    if (matched.load() && ! isMatchStale())
+    //
+    // Nor while Running with a match in force: the match is about to become whatever the
+    // preview would show, a quarter of a second from now, and drawing the two a hair
+    // apart and flickering is not news.
+    if (matched.load() && (running || ! isMatchStale()))
         return;
 
     // From exactly what performMatch() would snapshot, so this is what Match builds.
@@ -478,6 +502,68 @@ void MatchEngine::timerCallback()
 }
 
 //==============================================================================
+void MatchEngine::setRunning (bool shouldRun, double windowSeconds)
+{
+    const auto seconds = juce::jlimit (runningSegmentSeconds, maxRunningWindowSeconds, windowSeconds);
+
+    if (shouldRun == running && std::abs (seconds - runningWindowSeconds) < 1.0e-9)
+        return;
+
+    running = shouldRun;
+    runningWindowSeconds = seconds;
+    applyWindow();
+}
+
+void MatchEngine::applyWindow()
+{
+    for (auto* capture : { &source, &reference })
+    {
+        auto& first = capture->analyzer[0];
+        const auto segmentSeconds = (double) (first.getFramesPerSegment() * (getFftSize() / 2)) / sampleRate;
+
+        // No history yet -- before the first prepare -- means nothing to window; the
+        // setting is kept and applied when prepare() allocates it.
+        if (first.getHistoryCapacity() <= 0 || segmentSeconds <= 0.0)
+            continue;
+
+        const auto segments = running ? juce::jmax (1, juce::roundToInt (runningWindowSeconds / segmentSeconds)) : 0;
+
+        if (first.getWindowSegments() == segments)
+            continue;
+
+        for (auto& analyzer : capture->analyzer)
+            analyzer.setWindowSegments (segments);
+
+        // A take learned here now reads differently, so a match taken from it is out of
+        // date. One imported from a file, or a side that has learned nothing, is not
+        // read through the window and has not changed.
+        if (capture->imported[0].empty() && first.getFrameCount() > 0)
+            ++windowRevision;
+    }
+
+    markCorrectionDirty();
+}
+
+std::int64_t MatchEngine::getWindowedFrameCount (Side side) const
+{
+    return captureFor (side).analyzer[0].getWindowedFrameCount();
+}
+
+bool MatchEngine::updateRunningMatch()
+{
+    if (! running || ! matched.load() || ! isMatchStale())
+        return false;
+
+    const auto now = juce::Time::getMillisecondCounter();
+
+    if (now - lastRunningMatchMs < runningUpdateIntervalMs)
+        return false;
+
+    lastRunningMatchMs = now;
+    return performMatch();
+}
+
+//==============================================================================
 bool MatchEngine::takeFor (const Capture& capture, Spectra& dest) const
 {
     // What this side would be matched from right now: the analyzer if it holds a take,
@@ -536,6 +622,8 @@ bool MatchEngine::performMatch()
         capture->framesAtMatch = capture->analyzer[0].getFrameCount();
     }
 
+    windowRevisionAtMatch = windowRevision;
+
     markCorrectionDirty();
     rebuildMatch();
     return true;
@@ -585,6 +673,8 @@ void MatchEngine::restoreFrom (const juce::XmlElement& element)
         capture->generationAtMatch = capture->generation;
         capture->framesAtMatch = capture->analyzer[0].getFrameCount();
     }
+
+    windowRevisionAtMatch = windowRevision;
 
     // Rebuild from the restored captures. prepare() reloads it too, but the host may
     // ask for the latency before playback ever starts.

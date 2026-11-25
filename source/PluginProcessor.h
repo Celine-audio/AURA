@@ -107,6 +107,15 @@ public:
     /** Whether pressing Match would do anything. */
     bool canMatch() const { return engine.canMatch(); }
 
+    /** Whether Running is on: each take is only the last few seconds, and a match in
+        force follows it. See MatchEngine's Running section. */
+    bool isRunning() const noexcept { return engine.isRunning(); }
+    double getRunningWindowSeconds() const noexcept { return engine.getRunningWindowSeconds(); }
+
+    /** How many frames a side's take is over right now: the window's worth at most
+        while Running, everything learned otherwise. */
+    std::int64_t getWindowedFrameCount (Side side) const { return engine.getWindowedFrameCount (side); }
+
     /** Builds the correction curve from the two captures and loads it into the
         convolution engine. Returns false if either capture is empty. */
     bool performMatch() { return engine.performMatch(); }
@@ -161,6 +170,10 @@ public:
         pin the drag throttle, which is what keeps knob moves from crackling. */
     int getRebuildCountForTests() const noexcept { return engine.getRebuildCount(); }
 
+    /** What the processor's timer does for a running match, callable from a test, which
+        has no message loop to run the timer. */
+    bool updateRunningMatchForTests() { return engine.updateRunningMatch(); }
+
 private:
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     void timerCallback() override;
@@ -176,6 +189,12 @@ private:
         has to be fast against the engine's own 120 ms rebuild throttle, and it costs
         nothing while the flag is clear, which is nearly always. */
     static constexpr int settingsPollMs = 30;
+
+    /** The same, for Running and its window under automation. */
+    std::atomic<bool> runningDirty { false };
+
+    // Hands Running and its window to the engine. Message thread.
+    void pushRunning();
 
     // Reads the curve-shaping parameters into the form the engine works from.
     MatchEngine::Settings currentSettings() const;

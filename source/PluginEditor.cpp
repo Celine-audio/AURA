@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 
 #include "ProductInfo.h"
+#include "UpdateCheck.h"
 
 #include <CelineUI/EmbeddedAssets.h>
 #include <CelineUI/Fonts.h>
@@ -32,6 +33,12 @@ namespace
     constexpr float aspectRatio = 2.25f;
 
     constexpr int defaultWidth = 1200;
+
+    /** The narrowest the window goes. Set by the bottom band: the phase box, Export, the
+        window stepper, and two slider rows each keeping a track worth dragging once their
+        name and readout have given up all they can -- see SliderRowControl::resized. At
+        940 the tracks came out about thirty pixels long, which is a knob, not a slider. */
+    constexpr int minimumWidth = 1000;
     constexpr int defaultHeight = (int) (defaultWidth / aspectRatio);
 
     // Celine's toolbar exactly: a 45px band holding 33px buttons, which leaves six
@@ -99,6 +106,88 @@ namespace
     const juce::Identifier previewProperty { "preview" };
     const juce::Identifier importFolderProperty { "importFolder" };
     const juce::Identifier viewShiftProperty { "viewShift" };
+
+    /** A themed message with a row of buttons -- juce::AlertWindow ignores the palette.
+        The first button is the accented choice. Each reports its index through onChoice;
+        the caller closes the window. Céline's, as it is there. */
+    class ChoicePrompt : public juce::Component
+    {
+    public:
+        ChoicePrompt (PluginLookAndFeel& lnf, const juce::String& text, const juce::StringArray& choices)
+        {
+            setLookAndFeel (&lnf);
+
+            message.setText (text, juce::dontSendNotification);
+            message.setFont (Fonts::light (14.0f));
+            message.setColour (juce::Label::textColourId, Theme::text());
+            message.setJustificationType (juce::Justification::topLeft);
+            addAndMakeVisible (message);
+
+            for (int i = 0; i < choices.size(); ++i)
+            {
+                auto* button = buttons.add (new juce::TextButton (choices[i]));
+
+                if (i == 0)
+                {
+                    button->setColour (juce::TextButton::buttonColourId, Theme::accent());
+                    button->setColour (juce::TextButton::textColourOffId, Theme::text());
+                }
+
+                button->onClick = [this, i] { if (onChoice) onChoice (i); };
+                addAndMakeVisible (button);
+            }
+
+            // Wide enough for the buttons side by side, tall enough for the wrapped text.
+            int rowWidth = 0;
+
+            for (auto* button : buttons)
+            {
+                button->changeWidthToFitText (buttonHeight);
+                button->setSize (juce::jmax (button->getWidth() + 16, 96), buttonHeight);
+                rowWidth += button->getWidth() + buttonGap;
+            }
+
+            const int width = juce::jmax (360, rowWidth - buttonGap + 2 * margin);
+
+            juce::AttributedString wrapped;
+            wrapped.append (text, message.getFont());
+            juce::TextLayout layout;
+            layout.createLayout (wrapped, static_cast<float> (width - 2 * margin - 10));
+
+            // Last, per the house rule: it fires resized(), which places the buttons.
+            setSize (width, 2 * margin + juce::roundToInt (layout.getHeight()) + 14 + 14 + buttonHeight);
+        }
+
+        ~ChoicePrompt() override { setLookAndFeel (nullptr); }
+
+        void paint (juce::Graphics& g) override { g.fillAll (Theme::chrome()); }
+
+        void resized() override
+        {
+            auto area = getLocalBounds().reduced (margin);
+            auto row = area.removeFromBottom (buttonHeight);
+
+            // Right to left, so the first choice sits leftmost.
+            for (int i = buttons.size(); --i >= 0;)
+            {
+                buttons[i]->setBounds (row.removeFromRight (buttons[i]->getWidth()));
+                row.removeFromRight (buttonGap);
+            }
+
+            area.removeFromBottom (14);
+            message.setBounds (area);
+        }
+
+        std::function<void (int choice)> onChoice;
+
+    private:
+        static constexpr int margin = 18;
+        static constexpr int buttonHeight = 30;
+        static constexpr int buttonGap = 8;
+
+        juce::Label message;
+        juce::OwnedArray<juce::TextButton> buttons;
+    };
 }
 
 PluginEditor::PluginEditor (PluginProcessor& p)
@@ -174,6 +263,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     refreshBypassLook();
 
+    addAndMakeVisible (windowControl);
+
     amountFader.getSlider().setTooltip ("How much of the measured difference to apply.");
     addAndMakeVisible (amountFader);
 
@@ -240,8 +331,11 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     setResizable (true, true);
 
     // The floor is what leaves the graph readable once the toolbar, the tabs, the
-    // slider rows and the footer have taken their fixed share.
-    setResizeLimits (780, (int) (780 / aspectRatio), 2400, (int) (2400 / aspectRatio));
+    // slider rows and the footer have taken their fixed share -- and, since Running's
+    // window joined the bottom band, what leaves Smoothing and L/R Link a track that can
+    // still be dragged beside it. At 780 the band held two settings; with three, each
+    // came out with no track at all.
+    setResizeLimits (minimumWidth, (int) (minimumWidth / aspectRatio), 2400, (int) (2400 / aspectRatio));
 
     if (auto* constrainer = getConstrainer())
         constrainer->setFixedAspectRatio ((double) aspectRatio);
@@ -255,6 +349,13 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 PluginEditor::~PluginEditor()
 {
     Theme::palette().removeChangeListener (this);
+
+    // A question still up goes with the window. It is a desktop window of its own, so
+    // nothing else would close it, and it draws with this editor's look and feel, which
+    // is about to be destroyed. The modal manager sees the deletion and does not delete
+    // it again.
+    if (openPrompt != nullptr)
+        delete openPrompt.getComponent();
 
     stopTimer();
     processorRef.setUiActive (false);
@@ -318,6 +419,22 @@ void PluginEditor::timerCallback()
     }
 
     refreshState();
+
+    // The first-run question and the update notice, only with the window on screen, and
+    // one dialog at a time.
+    if (isShowing() && openPrompt == nullptr)
+    {
+        if (! updateQuestionChecked)
+        {
+            updateQuestionChecked = true;
+            offerUpdateChecksOnFirstRun();
+            startUpdateCheckIfEnabled();
+        }
+        else if (const auto release = UpdateCheck::Session::takeUpdateToAnnounce())
+        {
+            announceUpdate (release->version);
+        }
+    }
 }
 
 void PluginEditor::refreshState()
@@ -330,11 +447,23 @@ void PluginEditor::refreshState()
 
     // A stage that already holds a take says how much it learned -- or, for one taken
     // from a file, which file; an empty one says what to do about it.
+    const auto running = processorRef.isRunning();
+
     auto learnStatus = [&] (PluginProcessor::Side side, bool capturing, std::int64_t frames,
                             const juce::String& what)
     {
         if (processorRef.isImportingTake (side))
             return "Reading file" + ellipsis;
+
+        // Running, a take is the window rather than everything learned, so that is what
+        // it reports -- and it stops growing once the window is full, which is how you
+        // can tell it is rolling rather than stuck.
+        if (capturing && running)
+        {
+            const auto windowed = processorRef.getWindowedFrameCount (side);
+            return windowed > 0 ? "Running" + ellipsis + "  " + describeFrames (windowed, sampleRate, fftSize)
+                                : "Running" + ellipsis;
+        }
 
         if (capturing)
             return frames > 0 ? "Learning" + ellipsis + "  " + describeFrames (frames, sampleRate, fftSize)
@@ -385,18 +514,24 @@ void PluginEditor::refreshState()
     // which is what starting a Learn does immediately. Saying so is the point: the
     // filter you are hearing is not the one the captures now describe, and nothing else
     // on screen would tell you.
-    const auto stale = processorRef.isMatchStale();
+    //
+    // Except while Running, where a match is out of date for a quarter of a second at a
+    // time by design and brings itself up to date without being asked.
+    const auto following = running && matched;
+    const auto stale = processorRef.isMatchStale() && ! following;
 
     auto& curveTab = tabBar.getTab (PhaseTabBar::eqCurve);
     const auto canMatch = processorRef.canMatch();
 
-    curveTab.setStatus (stale    ? "Match out of date"
-                      : matched  ? "Match active"
-                      : canMatch ? "Ready to match"
-                                 : "Not matched",
+    curveTab.setStatus (following ? "Match running"
+                      : stale     ? "Match out of date"
+                      : matched   ? "Match active"
+                      : canMatch  ? "Ready to match"
+                                  : "Not matched",
                         matched);
     curveTab.setActionActive (matched);
     curveTab.setActionAttention (stale);
+
     curveTab.getActionButton().setEnabled (canMatch);
 
     refreshDisplay();
@@ -588,6 +723,19 @@ void PluginEditor::showSettingsMenu()
 {
     juce::PopupMenu menu;
 
+    // Whether to look for a newer version once each time the plugin starts.
+    juce::PopupMenu::Item updates ("Check for updates at launch");
+    updates.isTicked = UpdateCheck::Preferences().isEnabled();
+    updates.setAction ([this, wasOn = updates.isTicked]
+    {
+        UpdateCheck::Preferences().setEnabled (! wasOn);
+
+        // This launch too, if it has not checked already.
+        if (! wasOn)
+            startUpdateCheckIfEnabled();
+    });
+    menu.addItem (updates);
+
     juce::PopupMenu::Item theme ("Theme" + ellipsis);
     theme.setAction ([this] { showThemeWindow (this); });
     menu.addItem (theme);
@@ -599,6 +747,107 @@ void PluginEditor::showSettingsMenu()
     // A menu has no parent to inherit a look and feel from.
     menu.setLookAndFeel (&lookAndFeel);
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&settingsButton));
+}
+
+//==============================================================================
+juce::DialogWindow* PluginEditor::launchPrompt (const juce::String& title, std::unique_ptr<juce::Component> content)
+{
+    juce::DialogWindow::LaunchOptions options;
+    options.dialogTitle = title;
+    options.dialogBackgroundColour = Theme::chrome();
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+    options.content.setOwned (content.release());
+
+    // Async, and the window deletes itself, so it is closed with exitModalState().
+    auto* window = options.launchAsync();
+    openPrompt = window;
+    return window;
+}
+
+void PluginEditor::offerUpdateChecksOnFirstRun()
+{
+    UpdateCheck::Preferences preferences;
+
+    if (preferences.hasBeenOffered())
+        return;
+
+    // Only with a window on screen, and marked as soon as it is asked: closing the
+    // question leaves the checks off, and it is not asked again.
+    jassert (isShowing());
+    preferences.markOffered();
+
+    const auto name = UpdateCheck::productName();
+
+    auto prompt = std::make_unique<ChoicePrompt> (
+        lookAndFeel,
+        "Check for a newer version of " + name + " when it starts?\n\n"
+            "Once per launch, " + name + " asks GitHub for its newest release and tells "
+            "you if it is newer than the one you have. Nothing about you or your "
+            "sessions is sent.\n\n"
+            "You can change this later in the Settings menu.",
+        juce::StringArray { "Check for updates", "No thanks" });
+
+    auto* raw = prompt.get();
+    const juce::Component::SafePointer<juce::DialogWindow> dialog (launchPrompt (name + " updates", std::move (prompt)));
+    const juce::Component::SafePointer<PluginEditor> safe (this);
+
+    raw->onChoice = [safe, dialog] (int choice)
+    {
+        if (dialog != nullptr)
+            dialog->exitModalState (0);
+
+        if (choice != 0)
+            return;
+
+        UpdateCheck::Preferences().setEnabled (true);
+
+        // And check this launch too.
+        if (safe != nullptr)
+            safe->startUpdateCheckIfEnabled();
+    };
+}
+
+void PluginEditor::startUpdateCheckIfEnabled()
+{
+    // Already checked this launch, or turned off.
+    if (UpdateCheck::Session::hasStarted() || ! UpdateCheck::Preferences().isEnabled())
+        return;
+
+    UpdateCheck::Session::startIfNeeded();
+}
+
+void PluginEditor::announceUpdate (const juce::String& version)
+{
+    // Turned off in another window meanwhile.
+    if (! UpdateCheck::Preferences().isEnabled())
+        return;
+
+    const auto name = UpdateCheck::productName();
+
+    auto prompt = std::make_unique<ChoicePrompt> (
+        lookAndFeel,
+        "A new update is available.\n\n"
+            + name + " " + version + " is out. You have " + UpdateCheck::installedVersion() + ".",
+        juce::StringArray { "Download", "Remind me later", "Turn off update checks" });
+
+    auto* raw = prompt.get();
+    const juce::Component::SafePointer<juce::DialogWindow> dialog (launchPrompt (name + " update", std::move (prompt)));
+
+    raw->onChoice = [dialog] (int choice)
+    {
+        if (dialog != nullptr)
+            dialog->exitModalState (0);
+
+        // The releases page rather than a file: the right download depends on the machine.
+        if (choice == 0)
+            UpdateCheck::releasesPage().launchInDefaultBrowser();
+        else if (choice == 2)
+            UpdateCheck::Preferences().setEnabled (false);
+
+        // "Remind me later" does nothing: the next launch asks again.
+    };
 }
 
 void PluginEditor::showExportPanel()
@@ -833,13 +1082,19 @@ void PluginEditor::resized()
 
         exportButton.setBounds (row.removeFromRight (108));
 
-        // Both settings side by side in what is left: two of them do not make a
-        // list, and stacking them pushed the graph up for no reason.
+        // The two settings that shape the curve either side, and Running's window
+        // between them, since it decides what the curve is made from. The window keeps
+        // its width; the two rows share what is left equally.
         row.reduce (gap * 2, 0);
-        const auto half = row.getWidth() / 2;
 
-        smoothingRow.setBounds (row.removeFromLeft (half).withTrimmedRight (gap * 2));
-        linkRow.setBounds (row);
+        const auto windowWidth = WindowStepper::preferredWidth;
+        const auto side = (row.getWidth() - windowWidth - gap * 4) / 2;
+
+        smoothingRow.setBounds (row.removeFromLeft (side));
+        row.removeFromLeft (gap * 2);
+        linkRow.setBounds (row.removeFromRight (side));
+        row.removeFromRight (gap * 2);
+        windowControl.setBounds (row.withSizeKeepingCentre (windowWidth, row.getHeight()));
     }
 
     area.removeFromBottom (gap);

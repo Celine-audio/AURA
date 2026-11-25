@@ -64,11 +64,51 @@ public:
     std::int64_t getFrameCount() const noexcept { return frameCount.load(); }
 
     /** Message thread: copies the averaged magnitude spectrum (length == numBins)
-        into dest. Returns false if no frames have been captured yet. */
+        into dest. Returns false if no frames have been captured yet.
+
+        With a window set (see setWindowSegments), the average is over the frames in
+        that window only, and false means the window holds none. */
     bool getAveragedMagnitudes (std::vector<float>& dest) const;
+
+    //==============================================================================
+    // Rolling history, for a take that is only ever the last few seconds.
+    //
+    // Alongside the long-term sum, a cumulative analyzer can keep the same power in a
+    // ring of short segments, framesPerSegment frames each. The window is then just how
+    // many of the newest segments the average reads, so changing it -- or turning it on
+    // in the middle of a take -- costs nothing and loses nothing: the long-term sum is
+    // still there underneath, and a longer window finds the history it reaches for
+    // already recorded, up to the ring's capacity.
+    //
+    // A ring of segments rather than of frames because of what it would cost: thirty
+    // seconds at 96k is fourteen hundred frames of two thousand bins each, per channel,
+    // per side. Segments a quarter of a second long put the same thirty seconds in a
+    // hundred and twenty, and a quarter of a second is finer than anyone can tell a
+    // window's length by ear.
+
+    /** Allocates the ring. Message thread, and only while the audio thread is not
+        pushing -- prepareToPlay, or before the analyzer is in use. Clears the history,
+        and keeps the long-term sum. Zero segments removes the ring. */
+    void prepareHistory (int framesPerSegment, int numSegments);
+
+    /** How many whole segments behind the one filling the average reads, or zero for
+        the long-term average. Clamped to what the ring holds. Any thread. */
+    void setWindowSegments (int segments) noexcept;
+    int getWindowSegments() const noexcept;
+
+    int getFramesPerSegment() const noexcept { return framesPerSegment; }
+    int getHistoryCapacity() const noexcept { return historySegments; }
+
+    /** How many frames the windowed average is over right now: all of them without a
+        window, and at most the window's worth with one. */
+    std::int64_t getWindowedFrameCount() const;
 
 private:
     void processFrame() noexcept;
+
+    // Sums the power of the segments the window covers into dest (numBins long) and
+    // returns how many frames that was. Caller holds the lock.
+    std::int64_t sumWindow (float* dest) const noexcept;
 
     juce::dsp::FFT fft;
     const int fftSize;
@@ -98,6 +138,18 @@ private:
     bool emaInitialised = false;
     std::atomic<std::int64_t> frameCount { 0 };
     std::atomic<bool> capturing { false };
+
+    // The rolling history, all of it guarded by accumulatorLock. history holds
+    // historySegments rows of numBins power sums; historyHead is the row filling now.
+    // Float rather than double: a row is the sum of a handful of frames, and a quarter
+    // of the memory matters more here than digits nobody can hear.
+    std::vector<float> history;
+    std::vector<int> historyFrames;
+    int historySegments = 0;
+    int framesPerSegment = 0;
+    int historyHead = 0;
+    int historyFilled = 0;    // rows holding data, the head included
+    int windowSegments = 0;   // 0 reads the long-term sum
 
     JUCE_LEAK_DETECTOR (SpectrumAnalyzer)
 };

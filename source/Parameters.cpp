@@ -115,6 +115,26 @@ namespace Parameters
             juce::ParameterID { ParamID::phase, 1 }, "Phase",
             juce::StringArray { "Linear", "Minimum" }, 1));
 
+        // Running: a take that is only ever the last `window` seconds, and a match that
+        // follows it. Off by default, because a match that moves by itself is not what
+        // anyone expects from pressing Match once.
+        layout.add (boolParam (ParamID::running, "Running", false));
+
+        juce::NormalisableRange<float> windowRange { 1.0f, 30.0f, 0.5f };
+        windowRange.setSkewForCentre (6.0f);
+
+        layout.add (floatParam (ParamID::window, "Window", windowRange, 5.0f,
+                                juce::AudioParameterFloatAttributes()
+                                    .withLabel ("s")
+                                    .withStringFromValueFunction ([] (float v, int)
+                                    {
+                                        return juce::String (v, 1) + " s";
+                                    })
+                                    .withValueFromStringFunction ([] (const juce::String& t)
+                                    {
+                                        return t.getFloatValue();
+                                    })));
+
         return layout;
     }
 }

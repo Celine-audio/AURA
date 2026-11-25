@@ -34,6 +34,11 @@ void SpectrumAnalyzer::reset()
         std::fill (emaPower.begin(), emaPower.end(), 0.0);
         emaInitialised = false;
         frameCount.store (0);
+
+        std::fill (history.begin(), history.end(), 0.0f);
+        std::fill (historyFrames.begin(), historyFrames.end(), 0);
+        historyHead = 0;
+        historyFilled = historySegments > 0 ? 1 : 0;
     }
 
     // The input side belongs to the audio thread; it clears it itself. Set last, so a
@@ -138,9 +143,53 @@ void SpectrumAnalyzer::processFrame() noexcept
             const auto mag = (double) fftBuffer[(size_t) k];
             powerSum[(size_t) k] += mag * mag;
         }
+
+        if (historySegments > 0)
+        {
+            auto* row = history.data() + (size_t) historyHead * (size_t) numBins;
+
+            for (int k = 0; k < numBins; ++k)
+            {
+                const auto mag = fftBuffer[(size_t) k];
+                row[k] += mag * mag;
+            }
+
+            // A full segment moves the head on, onto the oldest row, which is cleared
+            // to be filled again: that is the moment the oldest quarter-second leaves.
+            if (++historyFrames[(size_t) historyHead] >= framesPerSegment)
+            {
+                historyHead = (historyHead + 1) % historySegments;
+                historyFilled = juce::jmin (historyFilled + 1, historySegments);
+
+                std::fill_n (history.data() + (size_t) historyHead * (size_t) numBins, numBins, 0.0f);
+                historyFrames[(size_t) historyHead] = 0;
+            }
+        }
     }
 
     frameCount.store (frameCount.load() + 1);
+}
+
+std::int64_t SpectrumAnalyzer::sumWindow (float* dest) const noexcept
+{
+    // The head, which is filling, and as many whole segments behind it as the window
+    // asks for and the ring has recorded -- so the span is the window plus however much
+    // of the current quarter-second has arrived.
+    const auto rows = juce::jmin (windowSegments + 1, historyFilled);
+
+    std::fill_n (dest, numBins, 0.0f);
+    std::int64_t frames = 0;
+
+    for (int i = 0; i < rows; ++i)
+    {
+        const auto index = (historyHead - i + historySegments) % historySegments;
+        const auto* row = history.data() + (size_t) index * (size_t) numBins;
+
+        juce::FloatVectorOperations::add (dest, row, numBins);
+        frames += historyFrames[(size_t) index];
+    }
+
+    return frames;
 }
 
 bool SpectrumAnalyzer::getAveragedMagnitudes (std::vector<float>& dest) const
@@ -158,6 +207,17 @@ bool SpectrumAnalyzer::getAveragedMagnitudes (std::vector<float>& dest) const
         for (int k = 0; k < numBins; ++k)
             dest[(size_t) k] = magnitudeScale * (float) std::sqrt (emaPower[(size_t) k]);
     }
+    else if (windowSegments > 0 && historySegments > 0)
+    {
+        const auto frames = sumWindow (dest.data());
+
+        if (frames <= 0)
+            return false;
+
+        const auto invCount = 1.0f / (float) frames;
+        for (int k = 0; k < numBins; ++k)
+            dest[(size_t) k] = magnitudeScale * std::sqrt (juce::jmax (0.0f, dest[(size_t) k] * invCount));
+    }
     else
     {
         const auto invCount = 1.0 / (double) count;
@@ -166,4 +226,55 @@ bool SpectrumAnalyzer::getAveragedMagnitudes (std::vector<float>& dest) const
     }
 
     return true;
+}
+
+//==============================================================================
+void SpectrumAnalyzer::prepareHistory (int newFramesPerSegment, int numSegments)
+{
+    // Allocated outside the lock and swapped in under it, so the audio thread's
+    // try-lock never waits on an allocation.
+    const auto segments = juce::jmax (0, numSegments);
+    std::vector<float> newHistory ((size_t) segments * (size_t) numBins, 0.0f);
+    std::vector<int> newFrames ((size_t) segments, 0);
+
+    {
+        const juce::SpinLock::ScopedLockType sl (accumulatorLock);
+        history.swap (newHistory);
+        historyFrames.swap (newFrames);
+        historySegments = segments;
+        framesPerSegment = juce::jmax (1, newFramesPerSegment);
+        historyHead = 0;
+        historyFilled = segments > 0 ? 1 : 0;
+        windowSegments = juce::jlimit (0, juce::jmax (0, segments - 1), windowSegments);
+    }
+
+    // The old ring is freed here, outside the lock.
+}
+
+void SpectrumAnalyzer::setWindowSegments (int segments) noexcept
+{
+    const juce::SpinLock::ScopedLockType sl (accumulatorLock);
+    windowSegments = juce::jlimit (0, juce::jmax (0, historySegments - 1), segments);
+}
+
+int SpectrumAnalyzer::getWindowSegments() const noexcept
+{
+    const juce::SpinLock::ScopedLockType sl (accumulatorLock);
+    return windowSegments;
+}
+
+std::int64_t SpectrumAnalyzer::getWindowedFrameCount() const
+{
+    const juce::SpinLock::ScopedLockType sl (accumulatorLock);
+
+    if (exponentialMode || windowSegments <= 0 || historySegments <= 0)
+        return frameCount.load();
+
+    const auto rows = juce::jmin (windowSegments + 1, historyFilled);
+    std::int64_t frames = 0;
+
+    for (int i = 0; i < rows; ++i)
+        frames += historyFrames[(size_t) ((historyHead - i + historySegments) % historySegments)];
+
+    return frames;
 }
