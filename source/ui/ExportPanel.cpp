@@ -1,161 +1,133 @@
 #include "ExportPanel.h"
 
-#include <CelineUI/Fonts.h>
-#include <CelineUI/Theme.h>
-
-using namespace Celine;
+using namespace Ui;
 
 namespace
 {
-    // ComboBox item IDs start at 1; keep the mapping in one place.
-    enum LayoutId { monoLayout = 1, stereoLayout };
-    enum SourceId { leftSource = 1, rightSource, midSource };
-    enum PhaseId { linearPhaseId = 1, minimumPhaseId };
+    constexpr float labelWidth = 80.0f;
 
-    constexpr int panelWidth = 290;
-    constexpr int rowHeight = 30;      // control plus the gap under it
-    constexpr int baseHeight = 136;    // title, the layout and phase rows, the buttons
+    // Segment indices, kept in one place.
+    enum { monoIndex = 0, stereoIndex };
+    enum { leftIndex = 0, rightIndex, midIndex };
+    enum { linearIndex = 0, minimumIndex };
 }
 
 ExportPanel::ExportPanel (bool linearPhase)
 {
-    titleLabel.setFont (Fonts::bold (13.0f));
-    addAndMakeVisible (titleLabel);
+    channels.setOptions ({ "MONO", "STEREO" });
+    channels.setOptionTooltips ({ "One correction in one channel",
+                                  "The left and right corrections as they stand" });
+    channels.setSelected (stereoIndex);
+    channels.setTitle ("Channels");
 
-    for (auto* label : { &layoutLabel, &sourceLabel, &phaseLabel })
+    source.setOptions ({ "L", "R", "L+R" });
+    source.setOptionTooltips ({ "The left channel's correction", "The right channel's correction",
+                                "The average of the two" });
+    source.setSelected (midIndex);
+    source.setTitle ("Derive a mono file from");
+
+    // Opens on whatever the plugin is doing, so the obvious action reproduces what you hear;
+    // the other is there because a minimum-phase file costs the convolver loading it no
+    // latency and leaves no pre-ringing.
+    phase.setOptions ({ "LINEAR", "MINIMUM" });
+    phase.setOptionTooltips ({ "Every frequency in step, at the cost of latency wherever it is loaded",
+                               "No latency, at the cost of some phase shift" });
+    phase.setSelected (linearPhase ? linearIndex : minimumIndex);
+    phase.setTitle ("Phase");
+
+    // A row of segments reports a click and leaves the choosing to its owner, which here is
+    // this panel. PHONICS's once did not, and its choice could be clicked with nothing changing.
+    for (auto* row : { &channels, &source, &phase })
     {
-        label->setFont (Fonts::light (11.5f));
-        addAndMakeVisible (label);
+        row->setStyle (false, 8.5f);
+        row->onSelect = [this, row] (int index)
+        {
+            row->setSelected (index);
+
+            // There is nothing to derive a stereo file from: it is the two corrections.
+            source.setLocked (channels.getSelected() != monoIndex);
+        };
+        addAndMakeVisible (row);
     }
 
-    layoutBox.setTooltip ("Whether the file carries one correction or a different one "
-                          "per channel.");
-    layoutBox.addItem ("Mono", monoLayout);
-    layoutBox.addItem ("Stereo", stereoLayout);
-    layoutBox.setSelectedId (stereoLayout, juce::dontSendNotification);
-    layoutBox.onChange = [this] { refreshLayout(); };
-    addAndMakeVisible (layoutBox);
+    source.setLocked (true);
 
-    sourceBox.setTooltip ("Which channel's correction a mono file is written from.");
-    sourceBox.addItem ("Left", leftSource);
-    sourceBox.addItem ("Right", rightSource);
-    sourceBox.addItem ("L+R", midSource);
-    sourceBox.setSelectedId (midSource, juce::dontSendNotification);
-    addAndMakeVisible (sourceBox);
-
-    // Opens on whatever the plugin is doing, so the obvious action reproduces what
-    // you hear; the other is there because a minimum-phase file costs the convolver
-    // loading it no latency and leaves no pre-ringing.
-    phaseBox.setTooltip ("How the exported response is built. Linear phase keeps every "
-                         "frequency in step and costs latency wherever it is loaded; "
-                         "minimum phase costs none.");
-    phaseBox.addItem ("Linear", linearPhaseId);
-    phaseBox.addItem ("Minimum", minimumPhaseId);
-    phaseBox.setSelectedId (linearPhase ? linearPhaseId : minimumPhaseId, juce::dontSendNotification);
-    addAndMakeVisible (phaseBox);
-
-    exportButton.setTooltip ("Choose where to write the file.");
+    exportButton.setTooltip ("Choose where to write the file");
     exportButton.onClick = [this]
     {
-        if (onExport != nullptr)
-            onExport (currentOptions());
+        const auto options = currentOptions();
+        close();
 
-        if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
-            box->dismiss();
+        if (onExport)
+            onExport (options);
     };
-    addAndMakeVisible (exportButton);
 
-    cancelButton.onClick = [this]
+    cancelButton.onClick = [this] { close(); };
+
+    for (auto* button : { &exportButton, &cancelButton })
     {
-        if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
-            box->dismiss();
-    };
-    addAndMakeVisible (cancelButton);
+        button->setWantsKeyboardFocus (false);
+        button->setMouseClickGrabsKeyboardFocus (false);
+        addAndMakeVisible (button);
+    }
 
-    applyColours();
+    // Read once, at the moment the panel opens: it lives only as long as the call-out, and the
+    // theme cannot be edited while it is up.
+    exportButton.setColour (juce::TextButton::buttonColourId, Theme::accent());
 
-    refreshLayout();
-}
-
-bool ExportPanel::isMono() const
-{
-    return layoutBox.getSelectedId() == monoLayout;
+    setSize (designWidth, designHeight);
 }
 
 IrExport::Options ExportPanel::currentOptions() const
 {
     IrExport::Options options;
-    options.layout = isMono() ? IrExport::Options::Layout::mono : IrExport::Options::Layout::stereo;
+    options.layout = channels.getSelected() == monoIndex ? IrExport::Options::Layout::mono
+                                                         : IrExport::Options::Layout::stereo;
 
-    switch (sourceBox.getSelectedId())
+    switch (source.getSelected())
     {
-        case leftSource:  options.channel = IrExport::Options::Channel::left;  break;
-        case rightSource: options.channel = IrExport::Options::Channel::right; break;
-        default:          options.channel = IrExport::Options::Channel::mid;   break;
+        case leftIndex:  options.channel = IrExport::Options::Channel::left;  break;
+        case rightIndex: options.channel = IrExport::Options::Channel::right; break;
+        default:         options.channel = IrExport::Options::Channel::mid;   break;
     }
 
-    options.phase = phaseBox.getSelectedId() == minimumPhaseId
-                        ? IrExport::Options::Phase::minimum
-                        : IrExport::Options::Phase::linear;
-
+    options.phase = phase.getSelected() == minimumIndex ? IrExport::Options::Phase::minimum
+                                                        : IrExport::Options::Phase::linear;
     return options;
 }
 
-void ExportPanel::refreshLayout()
+void ExportPanel::close()
 {
-    const auto mono = isMono();
-
-    sourceLabel.setVisible (mono);
-    sourceBox.setVisible (mono);
-
-    // The CallOutBox repositions itself around its content, so growing and
-    // shrinking here keeps the popover snug either way.
-    setSize (panelWidth, baseHeight + (mono ? rowHeight : 0));
-}
-
-void ExportPanel::paint (juce::Graphics& g)
-{
-    // Matching the bubble it sits in — see drawCallOutBoxBackground. Filling with
-    // anything else would draw a square of it over the rounded corners.
-    g.fillAll (Theme::consoleBackground());
-}
-
-void ExportPanel::applyColours()
-{
-    titleLabel.setColour (juce::Label::textColourId, Theme::text());
-
-    for (auto* label : { &layoutLabel, &sourceLabel, &phaseLabel })
-        label->setColour (juce::Label::textColourId, Theme::textDim());
-
-    // The one action here, in the correction's own violet: this is the panel's button,
-    // not a piece of chrome.
-    exportButton.setColour (juce::TextButton::buttonColourId, Theme::correction());
-    exportButton.setColour (juce::TextButton::textColourOffId, Theme::chrome());
+    if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
+        box->dismiss();
 }
 
 void ExportPanel::resized()
 {
-    auto area = getLocalBounds().reduced (14, 12);
+    auto area = getLocalBounds().reduced (Space::outer);
+    area.removeFromTop (Space::sectionHeader + Space::gutter);
 
-    titleLabel.setBounds (area.removeFromTop (18));
-    area.removeFromTop (8);
+    for (auto* row : { &channels, &source, &phase })
+        row->setBounds (area.removeFromTop (Space::row).withTrimmedLeft ((int) labelWidth).reduced (0, Space::cell / 2));
 
-    auto row = [&] (juce::Label& label, juce::ComboBox& box)
+    auto buttons = area.removeFromBottom (Space::row + Space::cell);
+    cancelButton.setBounds (buttons.removeFromLeft (96).reduced (0, Space::cell / 2));
+    exportButton.setBounds (buttons.removeFromRight (120).reduced (0, Space::cell / 2));
+}
+
+void ExportPanel::paint (juce::Graphics& g)
+{
+    // The call-out's own ground, as the menus beside it.
+    g.fillAll (Theme::phTile());
+
+    const auto inner = getLocalBounds().toFloat().reduced ((float) Space::outer);
+    Sheet::drawHeading (g, inner.withHeight ((float) Space::sectionHeader), "EXPORT IR");
+
+    auto top = inner.getY() + (float) (Space::sectionHeader + Space::gutter);
+
+    for (const auto* label : { "CHANNELS", "FROM", "PHASE" })
     {
-        auto r = area.removeFromTop (rowHeight - 6);
-        label.setBounds (r.removeFromLeft (86));
-        box.setBounds (r);
-        area.removeFromTop (6);
-    };
-
-    row (layoutLabel, layoutBox);
-
-    if (sourceBox.isVisible())
-        row (sourceLabel, sourceBox);
-
-    row (phaseLabel, phaseBox);
-
-    auto buttons = area.removeFromBottom (26);
-    cancelButton.setBounds (buttons.removeFromLeft (84));
-    exportButton.setBounds (buttons.removeFromRight (100));
+        Sheet::drawLabel (g, { inner.getX(), top, labelWidth, (float) Space::row }, label);
+        top += (float) Space::row;
+    }
 }

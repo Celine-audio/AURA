@@ -27,7 +27,7 @@ TEST_CASE ("A tab's stage colour follows the theme", "[theme]")
     const struct Restore { ~Restore() { Theme::palette().reset(); } } restore;
 
     PhaseTabBar bar;
-    bar.setBounds (0, 0, 900, 56);
+    bar.setBounds (0, 0, 600, PhaseTabBar::preferredHeight);
     bar.setSelected (PhaseTabBar::current);
 
     auto& tab = bar.getTab (PhaseTabBar::current);
@@ -59,8 +59,9 @@ TEST_CASE ("A tab's stage colour follows the theme", "[theme]")
                     ++moved;
     }
 
-    // The fill is most of the tab. Anything in the low hundreds would mean only an
-    // edge moved; zero is what the constructor snapshot gave.
+    // The stage's colour is the row's legend line, the curve's key, and only that: a short
+    // line two pixels thick. So the whole of it has to follow the role. Zero is what the
+    // constructor snapshot gave.
     INFO ("pixels that followed the role, outside the action button: " << moved);
-    CHECK (moved > 2000);
+    CHECK (moved >= 20);
 }

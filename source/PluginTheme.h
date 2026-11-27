@@ -1,8 +1,47 @@
-// AURA's own colour accessors, included inside namespace Celine::Theme by ui/Theme.h.
+// AURA's own colour accessors, included inside namespace Celine::Theme by CelineUI/Theme.h.
 // The roles behind them are declared in PluginThemeRoles.h.
 //
 // No include guard and no includes of its own: this is a fragment, included at one
 // point inside a namespace, and anything it needs is already there.
+
+//======================================================================
+// The page: PHONICS's greys, by PHONICS's names, so the two plugins are drawn alike.
+
+/** Behind everything: the toolbar and the margin round the page. */
+inline juce::Colour phWindow() { return colour (Role::phWindow); }
+
+/** The page the two halves sit on. */
+inline juce::Colour phPage() { return colour (Role::phPage); }
+
+/** The recessed panes: the room and the builder. */
+inline juce::Colour phWell() { return colour (Role::phWell); }
+
+/** A dial's cell, a readout block, a row of the driver table. */
+inline juce::Colour phTile() { return colour (Role::phTile); }
+
+/** A button or field that is not selected, and the page's border. */
+inline juce::Colour phControl() { return colour (Role::phControl); }
+
+/** A dial's unfilled arc. */
+inline juce::Colour phTrack() { return colour (Role::phTrack); }
+
+/** The rule between the two halves. */
+inline juce::Colour phRule() { return colour (Role::phRule); }
+
+/** Titles, values, outlines. */
+inline juce::Colour phInk() { return colour (Role::phInk); }
+
+/** A value that is secondary, an unselected button's text. */
+inline juce::Colour phDim() { return colour (Role::phDim); }
+
+/** A label. */
+inline juce::Colour phLabel() { return colour (Role::phLabel); }
+
+/** A label that should be read last: column heads, group prefixes. */
+inline juce::Colour phFaint() { return colour (Role::phFaint); }
+
+/** A note to be read last: the line beside each half's title. */
+inline juce::Colour phIndex() { return colour (Role::phIndex); }
 
 //======================================================================
 // What each colour *means* on the graph. Named by job rather than by colour, so the
@@ -41,25 +80,6 @@ inline juce::Colour graphLine() { return colour (Role::graphLine); }
 /** The veil over the frequencies outside the band. Drawn at low alpha, so this is read
     as a tint rather than a fill. */
 inline juce::Colour graphShade() { return colour (Role::graphShade); }
-
-//======================================================================
-// The light panel: the band along the bottom, and everything standing on it.
-//
-// The house design is two-tone and says so, but this is the one window that has the
-// second tone in it. So the ground and the two inks are declared here rather than in
-// the kit -- a plugin whose window is dark throughout has nothing to say about any of
-// them.
-
-/** The band itself, near-white: the design's other half. */
-inline juce::Colour panel() { return colour (Role::panel); }
-
-/** Ink on it, where the window's usual light-on-dark would be invisible. */
-inline juce::Colour textOnPanel() { return colour (Role::textOnPanel); }
-
-/** A knob cap or slider grip standing on it, dark for the same reason. handle() is
-    the near-white one every other control in the window wears; against this ground it
-    would disappear. */
-inline juce::Colour handleOnPanel() { return colour (Role::handleOnPanel); }
 
 //======================================================================
 

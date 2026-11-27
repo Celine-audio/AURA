@@ -1,64 +1,66 @@
 #pragma once
 
-#include <CelineUI/IconButton.h>
-#include <CelineUI/Theme.h>
-
-#include <juce_gui_basics/juce_gui_basics.h>
+#include "Controls.h"
 
 #include <array>
 #include <functional>
+#include <memory>
 
 /**
-    One segment of the match workflow, drawn as a Logic-style chevron: a title, a
-    status line, and an action button (Learn, or Match on the last one).
+    One stage of the match workflow, as a row of the STAGES sheet: a short line in the
+    stage's own curve colour (the graph's legend), its number and name, a line of status,
+    and at the right its fields -- FILE to learn it from audio on disk, and the action:
+    LEARN, or MATCH on the last.
 
-    Clicking the body selects the tab, which is what the curve display is showing.
-    Clicking the action button is a separate thing entirely — it starts a capture or
-    commits the match — so it never changes the selection on its own.
+    Drawn the way PHONICS draws its microphone sheet. The selected row is a band a step
+    lighter than the well behind it with a short accent bar at its left edge, and nothing
+    is drawn over a word. Clicking the row selects it, which is what the graph shows;
+    clicking a field is a separate thing -- it starts a capture or commits the match -- and
+    never changes the selection on its own.
+
+    Every colour is read as it paints, and the stage's colour is held as its role, so a
+    theme change needs nothing but a repaint.
 */
 class PhaseTab : public juce::Component,
                  public juce::SettableTooltipClient
 {
 public:
-    /** armsCapture separates the two kinds of action button: a Learn arms a capture,
-        so it reads red while it runs, whereas Match commits one and reads as done. */
+    /** armsCapture separates the two kinds of action: a Learn arms a capture, so it lights
+        in the recording red while it runs, whereas Match commits one. */
     PhaseTab (const juce::String& tabTitle, const juce::String& actionText,
               Celine::Theme::Role tabAccent, bool armsCapture);
 
-    /** Selecting a tab is what puts its curve on screen. */
+    /** Selecting a stage is what puts its curve on screen. */
     void setSelected (bool shouldBeSelected);
     bool isSelected() const noexcept { return selected; }
 
-    /** Updates the line under the title, and whether this stage already holds data
-        (which is what its dot reports). Only repaints when something changed. */
+    /** Updates the status line, and whether this stage already holds data. Only repaints
+        when something changed. */
     void setStatus (const juce::String& newStatus, bool stageHasData);
 
-    /** Draws the action button as engaged — a capture running, or a match applied. */
+    /** The number before the name, "01" to "03": where the stage stands in the chain. */
+    void setIndex (const juce::String& newIndex) { index = newIndex; repaint(); }
+
+    /** Lights the action: a capture running, or a match applied. */
     void setActionActive (bool shouldBeActive);
 
-    /** Draws the action button as wanting pressing again: what it committed no longer
-        reflects what has been learned since. Only the Match tab uses this — a Learn
-        cannot go out of date, it either ran or it did not. */
+    /** Lights the action in the out-of-date orange: what it committed no longer reflects
+        what has been learned since. Only MATCH uses this -- a Learn cannot go out of date. */
     void setActionAttention (bool shouldWantAttention);
 
-    /** True while this tab's action is running a capture, which is the only state the
-        red indicator means. */
+    /** True while this stage's action is running a capture. */
     bool isCapturing() const noexcept { return arms && action.getToggleState(); }
 
-    juce::TextButton& getActionButton() noexcept { return action; }
+    Ui::Toggle& getActionButton() noexcept { return action; }
 
-    /** Gives this tab a second, smaller button to the left of its action: one that
-        learns the stage from an audio file instead of from what is playing. */
+    /** Gives this stage a FILE field before its action: learning it from an audio file
+        instead of from what is playing. */
     void enableImport();
 
-    /** The button enableImport() added, or null on a tab without one. */
-    Celine::IconButton* getImportButton() noexcept { return importButton.get(); }
+    /** The field enableImport() added, or null on a stage without one. */
+    Ui::Toggle* getImportButton() noexcept { return importButton.get(); }
 
-    /** The colours this takes once rather than reading as it draws. See Theme.h. */
-    void applyColours();
-    void lookAndFeelChanged() override { applyColours(); }
-
-    /** Called when the body (not the action button) is clicked. */
+    /** Called when the row (not one of its fields) is clicked. */
     std::function<void()> onSelect;
 
     void paint (juce::Graphics&) override;
@@ -66,60 +68,40 @@ public:
     void mouseUp (const juce::MouseEvent&) override;
     void mouseEnter (const juce::MouseEvent&) override;
     void mouseExit (const juce::MouseEvent&) override;
-    bool hitTest (int x, int y) override;
+    void lookAndFeelChanged() override { repaint(); }
 
-    /** How far the chevron point juts out, and therefore how much neighbouring tabs
-        have to overlap for the point to sit in the next tab's notch. */
-    static constexpr int chevronWidth = 14;
-
-    /** Set by the bar so the end tabs get a flat outer edge rather than a stray
-        notch or point hanging off the end of the row. */
-    void setEdges (bool isFirstTab, bool isLastTab);
+    /** The two field columns, right to left: the action, and FILE before it. Public so the
+        sheet can name them in its heading band. */
+    static constexpr int actionWidth = 76;
+    static constexpr int importWidth = 60;
 
 private:
-    // The chevron only changes with the bounds, but hitTest runs on every mouse move
-    // over the bar and paint on every repaint, so it is built once in resized().
-    void rebuildOutline();
+    void refreshActionLook();
 
-    juce::Path outline;
-    juce::Path separator;
+    juce::String title, status, index;
 
-    juce::String title, status;
-
-    /** The stage's own colour, held as the role rather than as the colour. It was the
-        colour once, taken in the constructor, which meant the selected tab's fill and
-        the state dot were the two things in this window a theme change could not
-        reach -- and neither is caught by the reach test, because one is a blend and
-        the other only appears once a stage holds data. */
+    /** The stage's own colour, held as the role rather than as the colour, so the legend
+        line follows a theme change. */
     const Celine::Theme::Role accentRole;
     juce::Colour accent() const { return Celine::Theme::colour (accentRole); }
 
-    juce::TextButton action;
+    Ui::Toggle action;
     const bool arms;
 
-    std::unique_ptr<Celine::IconButton> importButton;
-
-    // The left edge of whichever button stands furthest left, which is where the
-    // tab's own text has to stop.
-    int controlsLeft() const noexcept;
-
-    // Which colour the action button wears. Held rather than read as it draws, the
-    // way every other colour in here is, so a theme change goes through applyColours.
-    void refreshActionColours();
+    std::unique_ptr<Ui::Toggle> importButton;
 
     bool selected = false;
     bool hasData = false;
     bool attention = false;
     bool hovered = false;
-    bool isFirst = false;
-    bool isLast = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PhaseTab)
 };
 
 /**
-    The three-stage strip under the curve display: Current, Reference, EQ Curve.
-    Lays the tabs out overlapping so each chevron point nests into the next notch.
+    The STAGES sheet: a heading over a rule, START BOTH at the heading's right, and the
+    three stages as rows under it -- Current, Reference, EQ Curve. The sheet paints the well
+    the rows sit on.
 */
 class PhaseTabBar : public juce::Component
 {
@@ -130,6 +112,12 @@ public:
 
     PhaseTab& getTab (Stage stage) noexcept { return *tabs[(size_t) stage]; }
 
+    /** Starts both Learns at once -- or, when both are running, stops them. */
+    Ui::Toggle& getStartBothButton() noexcept { return startBoth; }
+
+    /** Which of the two sides is learning: START BOTH lights, and reads STOP BOTH, once both run. */
+    void setLearning (bool currentIsLearning, bool referenceIsLearning);
+
     void setSelected (Stage stage);
     Stage getSelected() const noexcept { return selected; }
 
@@ -137,11 +125,20 @@ public:
         when it is set programmatically. */
     std::function<void (Stage)> onSelectionChanged;
 
+    /** The heading band, the gap under it and the three rows. */
+    static constexpr int headingHeight = Ui::Space::row;
+    static constexpr int rowHeight = 24;
+    static constexpr int preferredHeight = headingHeight + Ui::Space::cell + rowHeight * (int) numStages;
+
+    void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
     std::array<std::unique_ptr<PhaseTab>, (size_t) numStages> tabs;
     Stage selected = current;
+
+    Ui::Toggle startBoth { "Start both" };
+    bool currentLearning = false, referenceLearning = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PhaseTabBar)
 };

@@ -5,6 +5,7 @@
 
 #include <CelineUI/EmbeddedAssets.h>
 #include <CelineUI/Fonts.h>
+#include <CelineUI/IconButton.h>
 
 #include <cmath>
 
@@ -26,41 +27,41 @@ namespace
         fade still takes about a second whatever the rate is. */
     const float fadePerTick = std::pow (0.86f, 30.0f / (float) refreshHz);
 
-    // 1:2.25, and locked there — see the constrainer in the constructor. Read as
-    // "one unit tall by two and a quarter across", which is the shape the graph
-    // wants: a frequency axis eight octaves wide against a dB axis a fraction of
-    // that.
-    constexpr float aspectRatio = 2.25f;
+    // 2:1, and locked there -- see the constrainer in the constructor. The graph wants to be
+    // wide, an axis eight octaves across against a dB axis a fraction of that, and the sheets
+    // under it want their three rows.
+    constexpr float aspectRatio = 2.0f;
 
     constexpr int defaultWidth = 1200;
-
-    /** The narrowest the window goes. Set by the bottom band: the phase box, Export, the
-        window stepper, and two slider rows each keeping a track worth dragging once their
-        name and readout have given up all they can -- see SliderRowControl::resized. At
-        940 the tracks came out about thirty pixels long, which is a knob, not a slider. */
-    constexpr int minimumWidth = 1000;
     constexpr int defaultHeight = (int) (defaultWidth / aspectRatio);
 
-    // Celine's toolbar exactly: a 45px band holding 33px buttons, which leaves six
-    // pixels of air above and below them.
-    constexpr int headerHeight = Celine::Theme::toolbarHeight;
+    /** The narrowest the window goes: what leaves the stage rows room for their status line
+        beside MATCH and PROCESSING. */
+    constexpr int minimumWidth = 1000;
 
-    // Set by what is inside it, not the other way round: a 30px action button, a
-    // title, and the line of status under it, with air enough that the buttons keep
-    // the size they were given. Anything less and the two lines of type start to
-    // crowd the button rather than sit beside it.
-    constexpr int tabRowHeight = 46;
-    constexpr int bottomRowHeight = 30;
-    constexpr int gap = 10;
+    constexpr int toolbarHeight = Celine::Theme::toolbarHeight;
 
-    /** Width of the two faders flanking the graph. Set by their names rather than by
-        their tracks: "amount" in Nico Moji at the size below measures 56px, and the
-        column has to hold it — the wordmark's face is a good deal wider than the one
-        the rest of the window is set in, and at 46px the label came out as "amo...". */
-    constexpr int faderWidth = 64;
+    /** PHONICS's page: 10 px in from the window's edges under the toolbar, its contents
+        Ui::Space::outer in from its own. */
+    constexpr int pageInset = 10;
+
+    /** The two settings groups beside the stages, and the label column their rows share. */
+    constexpr int matchWidth = 230;
+    constexpr int processingWidth = 250;
+    constexpr int groupLabelWidth = 84;
 
     // juce::String treats a plain char* as Latin-1, so a UTF-8 glyph needs fromUTF8.
     const juce::String ellipsis = juce::String::fromUTF8 ("\xe2\x80\xa6");
+
+    /** How much audio a count of frames is, as "12.4 s". */
+    juce::String describeSeconds (std::int64_t frames, double sampleRate, int fftSize)
+    {
+        if (sampleRate <= 0.0)
+            return juce::String (frames) + " frames";
+
+        const auto seconds = (double) frames * (double) (fftSize / 2) / sampleRate;
+        return (seconds < 10.0 ? juce::String (seconds, 1) : juce::String (juce::roundToInt (seconds))) + " s";
+    }
 
     juce::String describeFrames (std::int64_t frames, double sampleRate, int fftSize)
     {
@@ -203,7 +204,6 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     // rather than put on the desktop, so what shows through the corners is this window.
     tooltips.setOpaque (false);
 
-    //display.setTooltip ("The signal, the reference and the correction between them. Drag the band edges to choose how much of the spectrum is matched.");
     addAndMakeVisible (display);
 
     tabBar.onSelectionChanged = [this] (PhaseTabBar::Stage stage)
@@ -225,58 +225,84 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         if (auto* import = tabBar.getTab (stage).getImportButton())
             import->onClick = [this, stage] { chooseFileToImport (stage); };
 
+    tabBar.getStartBothButton().onClick = [this] { startOrStopBoth(); };
     addAndMakeVisible (tabBar);
 
-    exportButton.setTooltip ("Export the correction out as an impulse response.");
+    // The toolbar, PHONICS's: settings and bypass as two square icon buttons, the output trim
+    // before them, and EXPORT IR in words before that.
+    const auto iconButton = [this] (Ui::PaintedButton& button, std::unique_ptr<juce::Drawable>& icon, bool isBypass)
+    {
+        button.painter = [&icon, isBypass, &button] (juce::Graphics& g, juce::Rectangle<float> area, bool hovered, bool down)
+        {
+            // Running is the ordinary state, so the button looks like its neighbours;
+            // bypassed is the state worth noticing, so that is the one that goes red.
+            const auto on = isBypass && button.getToggleState();
+            g.setColour (Theme::underPointer (on ? Theme::danger() : Theme::phTile(), hovered, down));
+            g.fillRect (area);
+
+            if (icon != nullptr)
+                icon->drawWithin (g, area.withSizeKeepingCentre (17.0f, 17.0f), juce::RectanglePlacement::centred, 1.0f);
+        };
+        button.setTooltip (button.getName());
+        addAndMakeVisible (button);
+    };
+
+    bypassButton.setClickingTogglesState (true);
+    iconButton (bypassButton, powerIcon, true);
+    iconButton (settingsButton, gearIcon, false);
+    settingsButton.onClick = [this] { showSettingsMenu(); };
+
+    // Read back out of the parameter rather than out of the button, so the red fill follows
+    // automation as well as clicks.
+    bypassAttachment = std::make_unique<juce::ButtonParameterAttachment> (
+        *processorRef.getAPVTS().getParameter (ParamID::bypass), bypassButton);
+
+    exportButton.setTooltip ("Export the correction as an impulse response.");
+    exportButton.setWantsKeyboardFocus (false);
+    exportButton.setMouseClickGrabsKeyboardFocus (false);
     exportButton.onClick = [this] { showExportPanel(); };
     addAndMakeVisible (exportButton);
 
-    settingsButton.onClick = [this] { showSettingsMenu(); };
-    addAndMakeVisible (settingsButton);
+    addAndMakeVisible (outputFader);
 
-    phaseLabel.setFont (Fonts::bold (10.0f));
-    phaseLabel.setColour (juce::Label::textColourId, Theme::textDim());
-    phaseLabel.setJustificationType (juce::Justification::centredRight);
-    phaseLabel.setInterceptsMouseClicks (false, false);
-    addAndMakeVisible (phaseLabel);
+    // PROCESSING: the phase, a row of two segments. The choice parameter's value is its
+    // index, so Linear is 0 and Minimum 1.
+    phaseSegments.setOptions ({ "LINEAR", "MINIMUM" });
+    phaseSegments.setOptionTooltips ({ "Linear phase: no phase shift, at the cost of latency.",
+                                       "Minimum phase: no latency, at the cost of some phase shift." });
+    phaseSegments.setStyle (false, 8.5f);
+    phaseSegments.setTitle ("Phase");
+    addAndMakeVisible (phaseSegments);
 
-    // Item IDs are the choice indices plus one, which is what the attachment expects.
-    phaseBox.setTooltip ("Linear phase adds latency, minimum phase costs none but adds phaseshift.");
-    phaseBox.addItem ("Linear", 1);
-    phaseBox.addItem ("Minimum", 2);
-    addAndMakeVisible (phaseBox);
+    if (auto* phase = processorRef.getAPVTS().getParameter (ParamID::phase))
+    {
+        // Called on the message thread whatever moved the parameter, automation included.
+        phaseAttachment = std::make_unique<juce::ParameterAttachment> (*phase, [this] (float index)
+        {
+            linearPhase = index < 0.5f;
+            phaseSegments.setSelected (linearPhase ? 0 : 1);
+            repaint (processingGroup);
+        }, nullptr);
 
-    phaseAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
-        processorRef.getAPVTS(), ParamID::phase, phaseBox);
+        phaseAttachment->sendInitialUpdate();
+    }
 
-    // Running is the ordinary state, so the button looks like its neighbours;
-    // bypassed is the state worth noticing, so that is the one that goes red.
-    bypassButton.setClickingTogglesState (true);
-
-    bypassButton.onStateChange = [this] { refreshBypassLook(); };
-    addAndMakeVisible (bypassButton);
-
-    applyColours();
-
-    bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
-        processorRef.getAPVTS(), ParamID::bypass, bypassButton);
-
-    refreshBypassLook();
+    phaseSegments.onSelect = [this] (int index)
+    {
+        if (phaseAttachment != nullptr)
+            phaseAttachment->setValueAsCompleteGesture ((float) index);
+    };
 
     addAndMakeVisible (windowControl);
 
-    amountFader.getSlider().setTooltip ("How much of the measured difference to apply.");
-    addAndMakeVisible (amountFader);
+    amountBox.setTooltip ("How much of the measured difference to apply. Below zero, the inverse. Drag up or down; double-click for 100 %.");
+    smoothingBox.setTooltip ("How finely the two curves are matched, in octaves. Drag up or down; double-click for the default.");
+    linkBox.setTooltip ("How much the left and right corrections are shared. Drag up or down; double-click for 100 %.");
 
-    outputFader.getSlider().setTooltip ("Output gain.");
-    addAndMakeVisible (outputFader);
+    for (auto* box : { &amountBox, &smoothingBox, &linkBox })
+        addAndMakeVisible (box);
 
-    smoothingRow.getSlider().setTooltip ("How finely the two curves are matched.");
-
-    linkRow.getSlider().setTooltip ("How independent the correction is for L and R channels.");
-
-    for (auto* row : { &smoothingRow, &linkRow })
-        addAndMakeVisible (row);
+    applyColours();
 
     // The band limits are dragged on the graph rather than dialled in beside it.
     display.onBandDragged = [this] (SpectrumDisplay::BandEdge edge, float hz) { setBand (edge, hz); };
@@ -381,6 +407,32 @@ void PluginEditor::toggleLearn (PhaseTabBar::Stage stage)
     refreshState();
 }
 
+void PluginEditor::startOrStopBoth()
+{
+    // Both learning: stop both. Otherwise start both -- and start both *fresh*, the one
+    // already running included, so the two takes begin on the same block and cover the
+    // same stretch of music. That is the whole reason to start them together.
+    const auto both = processorRef.isSourceCapturing() && processorRef.isReferenceCapturing();
+
+    if (both)
+    {
+        processorRef.setSourceCapturing (false);
+        processorRef.setReferenceCapturing (false);
+    }
+    else
+    {
+        for (auto side : { PluginProcessor::Side::source, PluginProcessor::Side::reference })
+        {
+            processorRef.setCapturing (side, false);
+            processorRef.setCapturing (side, true);
+        }
+
+        tabBar.setSelected (PhaseTabBar::current);
+    }
+
+    refreshState();
+}
+
 void PluginEditor::performMatch()
 {
     // The tabs already say what happened — "Match active" against "Ready to match" —
@@ -452,6 +504,9 @@ void PluginEditor::refreshState()
     auto learnStatus = [&] (PluginProcessor::Side side, bool capturing, std::int64_t frames,
                             const juce::String& what)
     {
+        // Said the way the stage row says everything: a word, a middle dot, a figure.
+        const juce::String dot = juce::String::fromUTF8 ("  \xc2\xb7  ");
+
         if (processorRef.isImportingTake (side))
             return "Reading file" + ellipsis;
 
@@ -461,13 +516,13 @@ void PluginEditor::refreshState()
         if (capturing && running)
         {
             const auto windowed = processorRef.getWindowedFrameCount (side);
-            return windowed > 0 ? "Running" + ellipsis + "  " + describeFrames (windowed, sampleRate, fftSize)
-                                : "Running" + ellipsis;
+            return windowed > 0 ? "Running" + dot + "last " + describeSeconds (windowed, sampleRate, fftSize)
+                                : juce::String ("Running");
         }
 
         if (capturing)
-            return frames > 0 ? "Learning" + ellipsis + "  " + describeFrames (frames, sampleRate, fftSize)
-                              : "Learning" + ellipsis;
+            return frames > 0 ? "Learning" + dot + describeSeconds (frames, sampleRate, fftSize)
+                              : juce::String ("Learning");
 
         if (const auto file = processorRef.getImportedTakeName (side); file.isNotEmpty())
             return file;
@@ -485,6 +540,9 @@ void PluginEditor::refreshState()
 
     const auto sourceCapturing = processorRef.isSourceCapturing();
     const auto referenceCapturing = processorRef.isReferenceCapturing();
+
+    // Start both's two lights, and whether it reads Start or Stop.
+    tabBar.setLearning (sourceCapturing, referenceCapturing);
 
     using Side = PluginProcessor::Side;
 
@@ -623,11 +681,14 @@ void PluginEditor::refreshDisplay()
 
     // With both takes in and Preview off there is a curve to build and nothing on screen
     // to say so, so the empty state says it instead.
-    const auto emptyState = ! needsMatch           ? juce::String()
-                          : processorRef.canMatch() ? juce::String ("Press Match to apply the correction")
-                                                    : juce::String ("Record a current and reference signal, then press Match");
-
-    display.setOverlayMessage (bypassed ? juce::String ("Bypassed") : emptyState);
+    if (bypassed)
+        display.setOverlay ("Bypassed", juce::String::fromUTF8 ("The signal passes untouched \xc2\xb7 the match keeps running"), true);
+    else if (! needsMatch)
+        display.setOverlay ({}, {}, false);
+    else if (processorRef.canMatch())
+        display.setOverlay ("Ready to match", "Press Match to apply the correction", false);
+    else
+        display.setOverlay ("Nothing learned yet", "Record a current and a reference signal, then press Match", false);
 
     display.repaint();
 }
@@ -653,28 +714,19 @@ void PluginEditor::beginBandGesture (SpectrumDisplay::BandEdge edge, bool starti
 
 void PluginEditor::applyColours()
 {
-    // The bottom band's own controls, which take their colours rather than reading them.
-    // This used to run once at construction, so a theme change reached everything in the
-    // window except the three things standing on the light panel.
-    applyPanelColours();
-
-    // Explicitly chosen, so explicitly handed back: an override set once is a snapshot
-    // like any other, and this one is the whole of what "bypassed" looks like.
-    bypassButton.setActiveColour (Theme::danger());
-
     // Re-read from the binary and tinted here rather than in the constructor. Tinting
-    // writes the colour into the drawable, so a second pass would be colouring the
-    // result of the first rather than the artwork -- which is how a mark ends up stuck
-    // on whatever colour the theme happened to be when the window opened.
+    // writes the colour into the drawable, so a second pass would be colouring the result
+    // of the first rather than the artwork -- which is how a mark ends up stuck on whatever
+    // colour the theme happened to be when the window opened.
     logo = Celine::Assets::drawable ("logo.svg");
+    powerIcon = Celine::Assets::drawable ("power-off-solid-full.svg");
+    gearIcon = Celine::Assets::drawable ("gear-solid-full.svg");
 
-    if (logo != nullptr)
-        Celine::Assets::tint (*logo, Theme::headerText());
+    for (auto* art : { logo.get(), powerIcon.get(), gearIcon.get() })
+        if (art != nullptr)
+            Celine::Assets::tint (*art, Theme::phInk());
 
-    wordmark = Celine::Assets::drawable (ProductInfo::wordmarkAsset, Celine::Assets::IfMissing::returnNull);
-
-    if (wordmark != nullptr)
-        Celine::Assets::tint (*wordmark, Theme::headerText());
+    repaint();
 }
 
 void PluginEditor::changeListenerCallback (juce::ChangeBroadcaster*)
@@ -693,30 +745,6 @@ void PluginEditor::changeListenerCallback (juce::ChangeBroadcaster*)
     sendLookAndFeelChange();
 
     repaint();
-}
-
-void PluginEditor::applyPanelColours()
-{
-    // The bottom band is the design's near-white panel. Everything standing on it
-    // has to flip: light-on-dark is the rest of the window's rule, and it is
-    // invisible here.
-    phaseLabel.setColour (juce::Label::textColourId, Theme::textOnPanel());
-
-    // Accent-filled, which is what Celine's pickers wear on the light panel — the
-    // one thing you have chosen, said in the one colour that means "chosen".
-    phaseBox.setColour (juce::ComboBox::backgroundColourId, Theme::correction());
-    phaseBox.setColour (juce::ComboBox::textColourId, Theme::textOnPanel());
-    phaseBox.setColour (juce::ComboBox::arrowColourId, Theme::textOnPanel());
-    phaseBox.setColour (juce::ComboBox::outlineColourId, Theme::textOnPanel().withAlpha (0.35f));
-
-    exportButton.setColour (juce::TextButton::buttonColourId, Theme::correction());
-    exportButton.setColour (juce::TextButton::textColourOffId, Theme::textOnPanel());
-    exportButton.setColour (juce::TextButton::textColourOnId, Theme::textOnPanel());
-}
-
-void PluginEditor::refreshBypassLook()
-{
-    bypassButton.setActive (bypassButton.getToggleState());
 }
 
 void PluginEditor::showSettingsMenu()
@@ -852,7 +880,7 @@ void PluginEditor::announceUpdate (const juce::String& version)
 
 void PluginEditor::showExportPanel()
 {
-    const auto linearPhase = processorRef.getAPVTS().getRawParameterValue (ParamID::phase)->load() < 0.5f;
+    // The export panel starts on the phase the plugin is running.
     auto panel = std::make_unique<ExportPanel> (linearPhase);
     panel->onExport = [this] (IrExport::Options options) { chooseFileAndExport (options); };
 
@@ -958,45 +986,78 @@ void PluginEditor::chooseFileToImport (PhaseTabBar::Stage stage)
 
 void PluginEditor::paint (juce::Graphics& g)
 {
-    // The surround is the darkest thing here, so the three panels standing on it —
-    // the two faders and the graph — read as openings rather than as boxes.
-    g.fillAll (Theme::consoleBackground());
+    g.fillAll (Theme::phWindow());
+    paintToolbar (g);
 
-    g.setColour (Theme::headerBackground());
-    g.fillRect (toolbarBand);
+    // The page, a step lighter than the window round it.
+    g.setColour (Theme::phPage());
+    g.fillRect (page);
 
-    // The faders stand on the surround itself rather than on a ground of their own.
-    // Only the graph is a panel, which is the point: it is the one thing here you
-    // look *into*, and giving its neighbours the same treatment flattened that.
+    // The section's title, in PHONICS's section-title face, and a note to be read last.
+    Ui::textOnCaps (g, "SPECTRUM", titleRow.toFloat(), Ui::spaced (Ui::heavy (11.0f), 2.0f), Theme::phInk());
+    Ui::textOnCaps (g, "WHAT IS PLAYING, WHAT IT SHOULD SOUND LIKE, AND THE EQ BETWEEN THEM",
+                    titleRow.toFloat(), Ui::spaced (Ui::medium (8.0f), 1.2f), Theme::phIndex(),
+                    juce::Justification::centredRight);
 
-    // The light panel, which is the design's other half: everything on it is drawn
-    // in dark ink — see applyPanelColours.
-    if (! bottomBand.isEmpty())
+    // The rule between the stages and the settings.
+    g.setColour (Theme::phRule());
+    g.fillRect (groupsRule);
+
+    // What the phase in force costs: half the filter at the running rate in linear phase,
+    // nothing in minimum. Information, so plain text with no box.
+    const auto rate = processorRef.getSampleRate();
+    const auto latencyMs = linearPhase && rate > 0.0
+                               ? juce::roundToInt (1000.0 * (double) (processorRef.getFilterLength() / 2) / rate)
+                               : 0;
+
+    paintGroup (g, matchGroup, "MATCH", { "AMOUNT", "SMOOTHING", "L/R LINK" });
+    paintGroup (g, processingGroup, "PROCESSING", { "PHASE", "RUNNING", "LATENCY" });
+
+    const auto latencyRow = processingGroup.withTrimmedTop (PhaseTabBar::headingHeight + Ui::Space::cell + 2 * PhaseTabBar::rowHeight)
+                                           .withHeight (PhaseTabBar::rowHeight)
+                                           .withTrimmedLeft (groupLabelWidth)
+                                           .toFloat();
+    Ui::text (g, juce::String (latencyMs) + " MS", latencyRow.reduced (6.0f, 0.0f), Ui::mono (9.5f), Theme::phDim());
+}
+
+void PluginEditor::paintGroup (juce::Graphics& g, juce::Rectangle<int> area, const juce::String& heading,
+                               std::initializer_list<const char*> labels)
+{
+    Ui::Sheet::drawHeading (g, area.removeFromTop (PhaseTabBar::headingHeight).toFloat(), heading);
+    area.removeFromTop (Ui::Space::cell);
+
+    // The rows' well, as the stages have theirs.
+    g.setColour (Theme::phWell());
+    g.fillRect (area);
+
+    for (const auto* label : labels)
+        Ui::Sheet::drawLabel (g, area.removeFromTop (PhaseTabBar::rowHeight).withTrimmedLeft (8).toFloat(), label);
+}
+
+void PluginEditor::paintToolbar (juce::Graphics& g)
+{
+    // PHONICS's toolbar: the window's ground, a rule under it, and whose it is, a hairline,
+    // what it is.
+    const auto width = (float) getWidth();
+
+    g.setColour (Theme::phControl());
+    g.fillRect (0.0f, (float) toolbarHeight - 1.0f, width, 1.0f);
+
+    auto x = 12.0f;
+
+    if (logo != nullptr)
     {
-        // No border: against the dark window a white panel is already the strongest
-        // edge in the picture, and a line around it only fought with its own contrast.
-        g.setColour (Theme::panel());
-        g.fillRoundedRectangle (bottomBand.toFloat(), Theme::cornerRadius);
+        const auto area = juce::Rectangle<float> (x, 0.0f, 78.0f, (float) toolbarHeight).withSizeKeepingCentre (78.0f, 17.0f);
+        logo->drawWithin (g, area, juce::RectanglePlacement::centred, 1.0f);
+        x += 78.0f + 14.0f;
     }
 
-    // The house mark first, drawn off its ink rather than its viewBox: the wordmark
-    // is not centred in its own box, so placing it by the box sits it visibly high.
-    if (logo != nullptr && ! logoBounds.isEmpty())
-        logo->drawWithin (g, logoBounds.toFloat(), juce::RectanglePlacement::centred, 1.0f);
+    g.setColour (Theme::phTrack());
+    g.fillRect (x, (float) toolbarHeight * 0.5f - 9.0f, 1.0f, 18.0f);
+    x += 15.0f;
 
-    // Then the product's name, as artwork rather than as type. Set as text it could
-    // only ever be as centred as the font's metrics allowed: "aura" in Nico Moji is
-    // all x-height, with no ascender and no descender, so it fills a little under
-    // half its line box and neither drawText nor GlyphArrangement::getBoundingBox —
-    // both of which work from ascent and descent — puts it where the eye wants it.
-    // Drawn from the SVG, it is placed off its own ink by exactly the call that
-    // places the mark beside it, and the two cannot disagree.
-    // Centred on its letters rather than on its box. A wordmark with descenders in it
-    // has a bounding box reaching below the line the word stands on, so centring the
-    // box sits the word visibly high against the house mark beside it.
-    if (wordmark != nullptr && ! wordmarkBounds.isEmpty())
-        Celine::Assets::drawWordmark (g, *wordmark, wordmarkBounds.toFloat());
-
+    Ui::text (g, juce::String (PRODUCT_NAME_WITHOUT_VERSION).toUpperCase(), { x, 0.0f, 200.0f, (float) toolbarHeight },
+              Ui::spaced (Ui::heavy (15.0f), 3.0f), Theme::phInk());
 }
 
 void PluginEditor::resized()
@@ -1009,116 +1070,48 @@ void PluginEditor::resized()
         state.setProperty ("uiHeight", getHeight(), nullptr);
     }
 
-    auto area = getLocalBounds();
-    toolbarBand = area.removeFromTop (headerHeight);
+    // The toolbar, right to left from the edge: settings, bypass, the trim, and EXPORT IR --
+    // PHONICS's places and sizes.
+    settingsButton.setBounds (getWidth() - 12 - 33, 6, 33, 33);
+    bypassButton.setBounds (settingsButton.getX() - 4 - 33, 6, 33, 33);
+    outputFader.setBounds (bypassButton.getX() - 16 - Ui::OutputFader::preferredWidth, 10,
+                           Ui::OutputFader::preferredWidth, 24);
+    exportButton.setBounds (outputFader.getX() - 24 - 104, 9, 104, 27);
 
-    {
-        auto header = toolbarBand.reduced (gap + 2, 0);
+    page = getLocalBounds().withTrimmedTop (toolbarHeight).reduced (pageInset);
+    auto area = page.reduced (Ui::Space::outer);
 
-        constexpr auto size = Theme::buttonSize;
-        constexpr auto pitch = Theme::buttonGap;
+    titleRow = area.removeFromTop (Ui::Space::sectionHeader);
+    area.removeFromTop (Ui::Space::gutter);
 
-        // The house mark leads, off its own aspect so it is never squashed, with the
-        // product's name beside it: whose it is, then what it is.
-        if (logo != nullptr)
-        {
-            const auto ink = logo->getDrawableBounds();
-            const auto aspect = ink.getHeight() > 0.0f ? ink.getWidth() / ink.getHeight() : 1.0f;
-            constexpr int logoHeight = 20;
-            const auto logoWidth = juce::roundToInt (logoHeight * aspect);
-
-            logoBounds = header.removeFromLeft (logoWidth).withSizeKeepingCentre (logoWidth, logoHeight);
-            header.removeFromLeft (14);
-        }
-
-        // Fitted to its aspect rather than given the rest of the strip: drawWithin
-        // centres the artwork's ink in whatever box it is handed, so a box that is
-        // exactly the ink's shape and centred on the band is ink centred on the band.
-        // 14 against the mark's 20 is the pairing that reads as its equal — this is
-        // a lowercase word, and matching its height to a capital would tower.
-        if (wordmark != nullptr)
-        {
-            const auto ink = wordmark->getDrawableBounds();
-            const auto aspect = ink.getHeight() > 0.0f ? ink.getWidth() / ink.getHeight() : 1.0f;
-            // Sized by the letters rather than by the ink box: see
-            // Assets::xHeightFraction. A word with an ascender or a descender needs a
-            // taller box to put the same sized letters in it.
-            const auto wordmarkHeight =
-                juce::roundToInt (14.0f / Celine::Assets::xHeightFraction (*wordmark));
-            const auto wordmarkWidth = juce::roundToInt ((float) wordmarkHeight * aspect);
-
-            wordmarkBounds = header.removeFromLeft (wordmarkWidth)
-                                   .withSizeKeepingCentre (wordmarkWidth, wordmarkHeight);
-        }
-
-        const auto square = [&header] (juce::Component& c)
-        {
-            c.setBounds (header.removeFromRight (size).withSizeKeepingCentre (size, size));
-            header.removeFromRight (pitch);
-        };
-
-        // Phase and Export have moved to the bottom row; what is left up here is the
-        // pair that act on the plugin as a whole, and the mark.
-        square (settingsButton);
-        square (bypassButton);
-    }
-
-    area = area.reduced (gap, 0);
-    area.removeFromTop (gap);
-
-    // No status row: everything it used to say is on the tabs, which say it where
-    // you are already looking.
-    area.removeFromBottom (gap);
-
-    // The bottom line: how the curve is realised on the left, what shapes it in the
-    // middle, and the one thing that writes a file on the right.
-    {
-        bottomBand = area.removeFromBottom (bottomRowHeight + gap);
-        auto row = bottomBand.reduced (gap, gap / 2);
-
-        phaseLabel.setBounds (row.removeFromLeft (46));
-        row.removeFromLeft (6);
-        phaseBox.setBounds (row.removeFromLeft (108));
-
-        exportButton.setBounds (row.removeFromRight (108));
-
-        // The two settings that shape the curve either side, and Running's window
-        // between them, since it decides what the curve is made from. The window keeps
-        // its width; the two rows share what is left equally.
-        row.reduce (gap * 2, 0);
-
-        const auto windowWidth = WindowStepper::preferredWidth;
-        const auto side = (row.getWidth() - windowWidth - gap * 4) / 2;
-
-        smoothingRow.setBounds (row.removeFromLeft (side));
-        row.removeFromLeft (gap * 2);
-        linkRow.setBounds (row.removeFromRight (side));
-        row.removeFromRight (gap * 2);
-        windowControl.setBounds (row.withSizeKeepingCentre (windowWidth, row.getHeight()));
-    }
-
-    area.removeFromBottom (gap);
-
-    // In goes on the left, out on the right, with the picture between them. Their
-    // columns are taken before the tab row is, so the two run the whole height of
-    // this part of the window — the graph's top edge down to the bottom of the tabs
-    // — rather than stopping where the graph does. The travel is as long as the
-    // window can give it, and the readout at the foot of each lands on the tab row's
-    // own baseline instead of floating in the gap above it.
-    amountPanel = area.removeFromLeft (faderWidth);
-    amountFader.setBounds (amountPanel);
-    area.removeFromLeft (gap);
-
-    outputPanel = area.removeFromRight (faderWidth);
-    outputFader.setBounds (outputPanel);
-    area.removeFromRight (gap);
-
-    // The stages span the graph, not the window: they are three views of what is
-    // drawn above them, so running past its edges would say they were something
-    // wider than that. Taking them out of the already-narrowed area is what makes
-    // that true, rather than a width copied across afterwards.
-    tabBar.setBounds (area.removeFromBottom (tabRowHeight));
-
-    area.removeFromBottom (gap);
+    // The sheets along the foot: the stages, a rule, then MATCH and PROCESSING.
+    auto sheets = area.removeFromBottom (PhaseTabBar::preferredHeight);
+    area.removeFromBottom (Ui::Space::gutter);
     display.setBounds (area);
+
+    processingGroup = sheets.removeFromRight (processingWidth);
+    sheets.removeFromRight (Ui::Space::gutter * 2);
+    matchGroup = sheets.removeFromRight (matchWidth);
+    sheets.removeFromRight (Ui::Space::gutter);
+    groupsRule = sheets.removeFromRight (1);
+    sheets.removeFromRight (Ui::Space::gutter);
+    tabBar.setBounds (sheets);
+
+    // A group's rows: the label column, then the control, half a cell in from the row's top
+    // and foot and an inner margin from the well's right edge.
+    const auto rowOf = [] (juce::Rectangle<int> group, int index)
+    {
+        return group.withTrimmedTop (PhaseTabBar::headingHeight + Ui::Space::cell + index * PhaseTabBar::rowHeight)
+                    .withHeight (PhaseTabBar::rowHeight)
+                    .withTrimmedLeft (groupLabelWidth)
+                    .withTrimmedRight (Ui::Space::cell)
+                    .reduced (0, Ui::Space::cell / 2);
+    };
+
+    amountBox.setBounds (rowOf (matchGroup, 0));
+    smoothingBox.setBounds (rowOf (matchGroup, 1));
+    linkBox.setBounds (rowOf (matchGroup, 2));
+
+    phaseSegments.setBounds (rowOf (processingGroup, 0));
+    windowControl.setBounds (rowOf (processingGroup, 1));
 }

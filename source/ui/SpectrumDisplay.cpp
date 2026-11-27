@@ -1,7 +1,5 @@
 #include "SpectrumDisplay.h"
 
-#include <CelineUI/Fonts.h>
-#include <CelineUI/Theme.h>
 
 #include <cmath>
 #include <limits>
@@ -28,13 +26,17 @@ namespace
     // The Preview button, as far in from the plot's right edge as it is from its top, so
     // it sits square in the corner. Ten, because the band's high edge stands on that
     // border with its grip at the top, and needs a clear run at it.
-    constexpr int previewWidth = 70;
-    constexpr int previewHeight = 22;
+    constexpr int previewWidth = 84;
+
+    constexpr int previewHeight = 20;
     constexpr int previewInset = 10;
 
     // The readout box's height, and how far below the plot's top its centre sits: on the
     // button's own centre line, so the two line up when both are showing.
     constexpr float readoutHeight = 20.0f;
+
+    /** The scales' type: PHONICS's frequency plot's. */
+    juce::Font scaleFont() { return Ui::mono (7.0f); }
     constexpr float readoutCentre = (float) previewInset + (float) previewHeight * 0.5f;
 }
 
@@ -49,6 +51,11 @@ SpectrumDisplay::SpectrumDisplay()
     setOpaque (true);
 
     previewButton.setClickingTogglesState (true);
+
+    // On, it lights in the orange of the curve it draws -- the same orange MATCH lights when
+    // it is asking to be pressed, which is the same news.
+    previewButton.setGlyph ("PREVIEW");
+    previewButton.setLitRole (Theme::Role::stale);
     previewButton.setToggleState (true, juce::dontSendNotification);
     previewButton.setWantsKeyboardFocus (false);
     previewButton.setTooltip ("Draw the preview of the EQ curve.");
@@ -67,17 +74,8 @@ SpectrumDisplay::SpectrumDisplay()
 
 void SpectrumDisplay::applyColours()
 {
-    // On, it wears the orange the curve it controls is drawn in -- the same tint the
-    // Match button takes when it is asking to be pressed, which is the same news. Off,
-    // it steps back to an ordinary control. Composited onto the graph's ground rather
-    // than left translucent, so the gridlines do not run through it.
-    const auto ground = Theme::background();
-    const auto orange = Theme::stale();
-
-    previewButton.setColour (juce::TextButton::buttonColourId, Theme::surface());
-    previewButton.setColour (juce::TextButton::buttonOnColourId, ground.overlaidWith (orange.withAlpha (0.24f)));
-    previewButton.setColour (juce::TextButton::textColourOffId, Theme::textDim());
-    previewButton.setColour (juce::TextButton::textColourOnId, orange.brighter (0.35f));
+    // The Preview field reads the theme as it paints; nothing to hand it here.
+    previewButton.repaint();
 }
 
 void SpectrumDisplay::setPreview (const std::vector<float>& leftDb, const std::vector<float>& rightDb)
@@ -100,7 +98,7 @@ void SpectrumDisplay::resized()
     const auto plot = getPlot().bounds;
 
     previewButton.setBounds (juce::roundToInt (plot.getRight()) - previewInset - previewWidth,
-                             juce::roundToInt (plot.getY()) + previewInset,
+                             juce::roundToInt (plot.getY()) + 6,
                              previewWidth, previewHeight);
 }
 
@@ -151,7 +149,14 @@ void SpectrumDisplay::setCorrection (const std::vector<float>& leftDb, const std
 
 void SpectrumDisplay::setOverlayMessage (const juce::String& message)
 {
-    overlayMessage = message;
+    setOverlay (message, {}, true);
+}
+
+void SpectrumDisplay::setOverlay (const juce::String& title, const juce::String& detail, bool dims)
+{
+    overlayMessage = title;
+    overlayDetail = detail;
+    overlayDims = dims;
 }
 
 PlotGeometry SpectrumDisplay::getPlot() const
@@ -198,8 +203,8 @@ void SpectrumDisplay::drawGrid (juce::Graphics& g, PlotGeometry plot, juce::Rect
     const FreqLine freqLines[] = {
         { 20.0f, "20" },     { 30.0f, nullptr },   { 50.0f, "50" },     { 70.0f, nullptr },
         { 100.0f, "100" },   { 200.0f, "200" },    { 300.0f, nullptr }, { 500.0f, "500" },
-        { 700.0f, nullptr }, { 1000.0f, "1k" },    { 2000.0f, "2k" },   { 3000.0f, nullptr },
-        { 5000.0f, "5k" },   { 7000.0f, nullptr }, { 10000.0f, "10k" }, { 20000.0f, "20k" },
+        { 700.0f, nullptr }, { 1000.0f, "1K" },    { 2000.0f, "2K" },   { 3000.0f, nullptr },
+        { 5000.0f, "5K" },   { 7000.0f, nullptr }, { 10000.0f, "10K" }, { 20000.0f, "20K" },
     };
 
     // Sub-pixel, not drawVerticalLine's integer y. The window is locked to an aspect
@@ -218,9 +223,10 @@ void SpectrumDisplay::drawGrid (juce::Graphics& g, PlotGeometry plot, juce::Rect
     // theme editor's "Grid line" moved nothing at all. Reaching the same picture from
     // grid()'s mid-grey instead of from white takes about four times the alpha, since
     // the grey starts that much nearer the ground it is laid on.
+    // PHONICS's plot: a solid rule at each named frequency, and a fainter one between them.
     for (const auto& line : freqLines)
     {
-        g.setColour (Theme::grid().withAlpha (line.label != nullptr ? 0.30f : 0.15f));
+        g.setColour (line.label != nullptr ? Theme::phRule() : Theme::phRule().withAlpha (0.45f));
         hairline (plot.freqToX (line.hz), plot.getY(), 1.0f, plot.getHeight());
     }
 
@@ -246,12 +252,13 @@ void SpectrumDisplay::drawGrid (juce::Graphics& g, PlotGeometry plot, juce::Rect
         // Zero is the correction's: no boost, no cut. Now that the correction is drawn
         // on every tab, that line means something on every tab -- and it is the line
         // that tells you where you are once the view has been moved.
-        g.setColour (Theme::grid().withAlpha (i == 0 ? 0.90f : 0.23f));
+        g.setColour (i == 0 ? Theme::phTrack().brighter (0.3f) : Theme::phRule());
         hairline (plot.getX(), y, plot.getWidth(), 1.0f);
     }
 
-    g.setFont (Fonts::light (10.0f));
-    g.setColour (Theme::graphText());
+    const auto axisFont = scaleFont();
+    g.setFont (axisFont);
+    g.setColour (Theme::phDim());
 
     for (const auto& line : freqLines)
     {
@@ -260,20 +267,28 @@ void SpectrumDisplay::drawGrid (juce::Graphics& g, PlotGeometry plot, juce::Rect
 
         // Clamp so the outermost labels stay inside the view instead of running under
         // one of the dB columns.
+        // Centred on its line, except the two at the ends, which are held to the plot's
+        // edges so they keep clear of the unit captions on the same row.
         const auto x = plot.freqToX (line.hz);
-        const auto left = juce::jlimit (full.getX(), full.getRight() - 44.0f, x - 22.0f);
-        g.drawText (line.label,
-                    juce::Rectangle<float> (left, plot.getBottom() + 2.0f, 44.0f, 12.0f),
-                    juce::Justification::centred);
+        const auto box = juce::Rectangle<float> (x - 22.0f, plot.getBottom() + 2.0f, 44.0f, axisBottom - 2.0f);
+
+        if (line.hz <= PlotGeometry::minFreq)
+            g.drawText (line.label, box.withX (plot.getX()), juce::Justification::centredLeft);
+        else if (line.hz >= PlotGeometry::maxFreq)
+            g.drawText (line.label, box.withRightX (plot.getRight()), juce::Justification::centredRight);
+        else
+            g.drawText (line.label, box, juce::Justification::centred);
     }
 
     // Both scales are labelled, at one weight. The idle one used to be dimmed to say
     // which was in play, but with the correction drawn on every tab both always are,
     // and a column that changed weight on a tab switch was the same restlessness the
     // gridlines had. The unit captions at the foot of each are what tell them apart.
-    const auto axisText = Theme::graphText().withAlpha (0.8f);
-
-    g.setColour (axisText);
+    // The scale the tab is about in full, the other one stepped back: the signal's on the
+    // two signal tabs, the correction's on the EQ Curve.
+    const auto onCorrection = view == View::eqCurve;
+    const auto activeText = Theme::phDim();
+    const auto idleText = Theme::phFaint();
 
     const auto signedDb = [] (int db)
     {
@@ -290,30 +305,34 @@ void SpectrumDisplay::drawGrid (juce::Graphics& g, PlotGeometry plot, juce::Rect
         // into.
         if (y < plot.getBottom() - 7.0f)
         {
+            g.setColour (onCorrection ? idleText : activeText);
             const auto spectrumDb = juce::roundToInt (PlotGeometry::spectrumDbAtCorrection (correctionDb));
             g.drawText (juce::String (spectrumDb),
-                        juce::Rectangle<float> (full.getX() + 2.0f, y - 7.0f, axisLeft - 8.0f, 14.0f),
+                        juce::Rectangle<float> (full.getX(), y - 7.0f, axisLeft - 6.0f, 14.0f),
                         juce::Justification::centredRight);
         }
 
         // The correction's every other line, 12 dB apart.
         if (i % 2 == 0)
+        {
+            g.setColour (onCorrection ? activeText : idleText);
             g.drawText (signedDb (juce::roundToInt (correctionDb)),
-                        juce::Rectangle<float> (plot.getRight() + 5.0f, y - 7.0f, axisRight - 7.0f, 14.0f),
+                        juce::Rectangle<float> (plot.getRight() + 6.0f, y - 7.0f, axisRight - 6.0f, 14.0f),
                         juce::Justification::centredLeft);
+        }
     }
 
     // Name the units once, at the foot of each column, so the two scales can't be
     // mistaken for one another.
-    g.setFont (Fonts::bold (9.0f));
-    // A row of their own, under the frequency labels: the 20 Hz label is clamped
-    // inwards far enough to sit over the left column otherwise.
-    const auto unitRow = juce::Rectangle<float> (0.0f, plot.getBottom() + 14.0f, 0.0f, 11.0f);
+    // On the frequencies' own row, under each dB column.
+    const auto unitRow = juce::Rectangle<float> (0.0f, plot.getBottom() + 2.0f, 0.0f, axisBottom - 2.0f);
 
-    g.setColour (axisText);
-    g.drawText ("dBFS", unitRow.withX (full.getX() + 2.0f).withWidth (axisLeft - 8.0f),
+    g.setFont (axisFont);
+    g.setColour (onCorrection ? idleText : activeText);
+    g.drawText ("DBFS", unitRow.withX (full.getX()).withWidth (axisLeft - 6.0f),
                 juce::Justification::centredRight);
-    g.drawText ("dB", unitRow.withX (plot.getRight() + 5.0f).withWidth (axisRight - 7.0f),
+    g.setColour (onCorrection ? activeText : idleText);
+    g.drawText ("DB", unitRow.withX (plot.getRight() + 6.0f).withWidth (axisRight - 6.0f),
                 juce::Justification::centredLeft);
 }
 
@@ -506,17 +525,19 @@ void SpectrumDisplay::drawBandShading (juce::Graphics& g, PlotGeometry area) con
         const auto x = area.freqToX (frequency);
         const auto live = dragging == which || (! dragging.has_value() && hovered == which);
 
-        g.setColour (live ? Theme::correction() : Theme::graphLine().withAlpha (0.75f));
+        g.setColour (live ? Theme::accent() : Theme::graphLine());
         g.fillRect (juce::Rectangle<float> (x, area.getY(), 1.0f, area.getHeight()));
 
         // The tab. Something to aim at, and the only thing that says the line moves.
         const auto tab = juce::Rectangle<float> (9.0f, 16.0f)
                              .withCentre ({ x, area.getY() + 8.0f });
 
-        g.setColour (live ? Theme::correction() : Theme::surface());
-        g.fillRoundedRectangle (tab, 2.5f);
-        g.setColour (live ? Theme::text() : Theme::line().withAlpha (0.75f));
-        g.drawRoundedRectangle (tab.reduced (0.5f), 2.5f, 1.0f);
+        // Square, as every grip on the page is: the accent while it is held or under the
+        // pointer, a field otherwise.
+        g.setColour (live ? Theme::accent() : Theme::phControl());
+        g.fillRect (tab);
+        g.setColour (live ? Theme::phInk() : Theme::phRule());
+        g.drawRect (tab.reduced (0.5f), 1.0f);
     };
 
     drawEdge (bandLow, BandEdge::low);
@@ -602,10 +623,10 @@ void SpectrumDisplay::drawReadout (juce::Graphics& g, PlotGeometry area) const
 
     const auto x = area.freqToX (freq);
 
-    g.setColour (Theme::text().withAlpha (0.25f));
+    g.setColour (Theme::phLabel());
     g.fillRect (juce::Rectangle<float> (x, area.getY(), 1.0f, area.getHeight()));
 
-    const auto font = Fonts::light (11.0f);
+    const auto font = Ui::mono (8.0f);
     const auto width = juce::GlyphArrangement::getStringWidth (font, text) + 16.0f;
 
     // Kept clear of the Preview button when it is up, with the gap the button keeps
@@ -619,14 +640,15 @@ void SpectrumDisplay::drawReadout (juce::Graphics& g, PlotGeometry area) const
                                                       right - width * 0.5f, x),
                                         area.getY() + readoutCentre });
 
-    g.setColour (Theme::surface().withAlpha (0.94f));
-    g.fillRoundedRectangle (box, 4.0f);
-    g.setColour (Theme::line());
-    g.drawRoundedRectangle (box, 4.0f, 1.0f);
+    // A tooltip's panel: the tile, a rule round it, square.
+    g.setColour (Theme::phTile());
+    g.fillRect (box);
+    g.setColour (Theme::phRule());
+    g.drawRect (box, 1.0f);
 
-    g.setColour (Theme::text());
+    g.setColour (Theme::phInk());
     g.setFont (font);
-    g.drawText (text, box, juce::Justification::centred);
+    g.drawText (text.toUpperCase(), box, juce::Justification::centred);
 }
 
 void SpectrumDisplay::paint (juce::Graphics& g)
@@ -634,17 +656,15 @@ void SpectrumDisplay::paint (juce::Graphics& g)
     const auto full = getLocalBounds().toFloat();
     const auto plot = getPlot();
 
-    // The surround first, so the rounded corners have something behind them and this
-    // component can still be opaque — see the constructor. It has to be the colour the
-    // editor paints around the graph, which is the one thing here that reaches outside
-    // this class for a value.
-    g.fillAll (Theme::consoleBackground());
+    // The page first, under the scales, so this component can still be opaque -- see the
+    // constructor. It has to be the colour the editor paints its page in, which is the one
+    // thing here that reaches outside this class for a value.
+    g.fillAll (Theme::phPage());
 
-    // A panel with no frame, but with the design's own corners: rounded like every
-    // other surface here, and unbordered because a line around it fought the band-edge
-    // grips, which are lines of their own.
-    g.setColour (Theme::background());
-    g.fillRoundedRectangle (full, Theme::cornerRadius);
+    // The plot is a well, as PHONICS's frequency plots are: recessed, no frame, the scales
+    // on the page round it. Information, so plain -- nothing here is a box.
+    g.setColour (Theme::phWell());
+    g.fillRect (plot.bounds);
 
     drawGrid (g, plot, full);
 
@@ -755,12 +775,28 @@ void SpectrumDisplay::paint (juce::Graphics& g)
 
     if (overlayMessage.isNotEmpty())
     {
-        g.setColour (Theme::background().withAlpha (0.62f));
-        g.fillRoundedRectangle (full, Theme::cornerRadius);
+        if (overlayDims)
+        {
+            g.setColour (Theme::phWell().withAlpha (0.8f));
+            g.fillRect (plot.bounds);
+        }
 
-        g.setColour (Theme::text().withAlpha (0.75f));
-        g.setFont (Fonts::bold (13.0f));
-        g.drawText (overlayMessage, plot.bounds, juce::Justification::centred);
+        // A title in tracked capitals, and the detail under it in the readout face.
+        const auto centre = plot.bounds.getCentre();
+        const auto hasDetail = overlayDetail.isNotEmpty();
+        const auto titleBox = juce::Rectangle<float> ((float) getWidth(), 18.0f).withCentre ({ centre.x, centre.y - (hasDetail ? 11.0f : 0.0f) });
+
+        // A title in the section titles' face, and the detail under it in the label face.
+        g.setColour (Theme::phInk());
+        g.setFont (Ui::spaced (Ui::heavy (11.0f), 2.0f));
+        g.drawText (overlayMessage.toUpperCase(), titleBox, juce::Justification::centred, false);
+
+        if (hasDetail)
+        {
+            g.setColour (Theme::phDim());
+            g.setFont (Ui::spaced (Ui::medium (8.0f), 1.2f));
+            g.drawText (overlayDetail.toUpperCase(), titleBox.translated (0.0f, 22.0f), juce::Justification::centred, false);
+        }
     }
 
 }

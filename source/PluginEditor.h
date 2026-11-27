@@ -6,10 +6,8 @@
 #include "ui/ExportPanel.h"
 #include "ui/PluginLookAndFeel.h"
 #include <CelineUI/Theme.h>
-#include <CelineUI/ParameterControl.h>
-#include "ui/SliderRowControl.h"
+#include "ui/Controls.h"
 #include "ui/PhaseTabs.h"
-#include <CelineUI/IconButton.h>
 #include "ui/SpectrumDisplay.h"
 #include "ui/WindowStepper.h"
 
@@ -78,18 +76,14 @@ private:
     SpectrumDisplay display;
     PhaseTabBar tabBar;
 
-    // Icons rather than words, the way Celine's toolbar is built: three square
-    // buttons on a pitch of Theme::buttonSize, with the artwork recoloured to the
-    // palette rather than drawn in whatever colours the file carries.
-    // A word rather than a glyph: "what does the floppy disk do" is a question a
-    // toolbar should not be asking, and this is the only button here that writes a
-    // file. Bypass and settings keep their icons, which are unambiguous.
+    // The toolbar, PHONICS's: EXPORT IR in words, the output trim, and two square icon
+    // buttons -- bypass, which fills with the danger red while bypassed, and settings.
     juce::TextButton exportButton { "EXPORT IR" };
-    Celine::IconButton bypassButton { "Bypass", "power-off-solid-full.svg" };
-    Celine::IconButton settingsButton { "Settings", "gear-solid-full.svg" };
+    Ui::OutputFader outputFader { processorRef.getAPVTS(), ParamID::outputGain };
+    Ui::PaintedButton bypassButton { "Bypass" }, settingsButton { "Settings" };
+    std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
+    std::unique_ptr<juce::Drawable> logo, powerIcon, gearIcon;
 
-    // The house mark, top right, tinted to the text colour. Celine draws it the
-    // same way and off the same file.
     // Fade state for one of the two moving traces: the last frame count seen from its
     // analyzer, how many ticks have passed without that changing, and how far the trace
     // has decayed once the wait ran out.
@@ -102,58 +96,45 @@ private:
 
     TraceFade currentFade, referenceFade;
 
-    std::unique_ptr<juce::Drawable> logo;
-    std::unique_ptr<juce::Drawable> wordmark;
-    juce::Rectangle<int> logoBounds, wordmarkBounds;
+    // Laid out in resized() and painted in paint(), because they sit behind the children
+    // rather than being children: the page, its title row, the groups' headings and wells,
+    // and the rule between the stages and the settings.
+    juce::Rectangle<int> page, titleRow, matchGroup, processingGroup, groupsRule;
 
-    // Painted bands, laid out in resized() and filled in paint() because they sit
-    // behind child components rather than being components themselves.
-    juce::Rectangle<int> toolbarBand, amountPanel, outputPanel, bottomBand;
+    /** The toolbar, PHONICS's: the house mark, a hairline, the product's name. */
+    void paintToolbar (juce::Graphics&);
 
-    // The bottom band is the design's light panel, so everything standing on it has
-    // to flip to dark ink. Done once, after construction, rather than at each site.
-    /** The bottom band's controls stand on the light panel, so they carry dark ink
-        rather than the chrome's. Called at construction and again whenever the theme
-        moves -- see the note in Theme.h about snapshots. */
-    void applyPanelColours();
+    /** One settings group: a heading band, and a well under labelled rows. */
+    void paintGroup (juce::Graphics&, juce::Rectangle<int> area, const juce::String& heading,
+                     std::initializer_list<const char*> labels);
+
+    /** The artwork this window tints once rather than at every paint. Called from the
+        constructor and again on every theme change. */
+    void applyColours();
 
     /** The theme moved. Re-reads the look and feel's colours, tells every child, and
         repaints -- which is the whole of what a theme change is from here. */
-    /** Every colour this window hands to a child rather than reading as it paints.
-        Called from the constructor and again on every theme change. */
-    void applyColours();
-
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
-    void lookAndFeelChanged() override { applyPanelColours(); }
 
     // Linear phase or minimum phase: the same curve, realised two ways, and the only
-    // control here that changes what the plugin costs in latency.
-    juce::Label phaseLabel { {}, "PHASE" };
-    juce::ComboBox phaseBox;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> phaseAttachment;
+    // control here that changes what the plugin costs in latency. A row of segments, the one
+    // in force accent-filled.
+    Ui::Segments phaseSegments;
+    std::unique_ptr<juce::ParameterAttachment> phaseAttachment;
+    bool linearPhase = false;
 
-    // The two that act on the signal ride down either side of the graph, in the
-    // order they act: how much correction goes in on the left, how much level comes
-    // out on the right.
-    FaderControl amountFader { processorRef.getAPVTS(), ParamID::amount,     "Amount" };
-    FaderControl outputFader { processorRef.getAPVTS(), ParamID::outputGain, "Output" };
+    // Starts both Learns at once, or stops both -- see PhaseTabBar.
+    void startOrStopBoth();
 
-    // The two that shape the curve sit along the bottom as a list of settings. The
-    // band limits are not here: they are dragged on the graph itself, where you can
-    // see what they are doing.
-    SliderRowControl smoothingRow { processorRef.getAPVTS(), ParamID::smoothing, "Smoothing" };
-    SliderRowControl linkRow      { processorRef.getAPVTS(), ParamID::link,      "L/R Link" };
+    // MATCH: what shapes and scales the curve. Fields dragged like PHONICS's number boxes,
+    // in each parameter's own range and words. The band limits are not here: they are
+    // dragged on the graph itself, where you can see what they are doing.
+    Ui::ParameterBox amountBox    { *processorRef.getAPVTS().getParameter (ParamID::amount),    "%" };
+    Ui::ParameterBox smoothingBox { *processorRef.getAPVTS().getParameter (ParamID::smoothing), "oct" };
+    Ui::ParameterBox linkBox      { *processorRef.getAPVTS().getParameter (ParamID::link),      "%" };
 
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
-
-    // Running, and how many seconds back it reads: the word WINDOW switches it on, and
-    // a stepper beside it sets the length. In the middle of the bottom band, between the
-    // two settings that shape the curve, since it decides what the curve is made from.
+    // PROCESSING's RUNNING row: the switch, and how many seconds back a take reads.
     WindowStepper windowControl { processorRef.getAPVTS(), ParamID::running, ParamID::window };
-
-    // Bypass reads its state back out of the parameter rather than out of the
-    // button, so the icon's red fill follows automation as well as clicks.
-    void refreshBypassLook();
 
     // Writes a band edge dragged on the graph back to the parameters, bracketed so
     // the host sees one gesture.

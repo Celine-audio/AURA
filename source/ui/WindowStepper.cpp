@@ -1,7 +1,5 @@
 #include "WindowStepper.h"
 
-#include <CelineUI/Fonts.h>
-#include <CelineUI/Theme.h>
 
 #include <cmath>
 
@@ -12,9 +10,8 @@ namespace
     // Past this the window steps by whole seconds rather than halves.
     constexpr float coarseFrom = 10.0f;
 
-    constexpr int switchWidth = 74;
-    constexpr int stepButtonSize = 22;
-    constexpr int readoutWidth = 52;
+    constexpr int switchWidth = 44;
+    constexpr int stepButtonSize = 24;
 
     // How soon a held button starts repeating, and how often after that.
     constexpr int repeatDelayMs = 400;
@@ -25,7 +22,7 @@ WindowStepper::WindowStepper (juce::AudioProcessorValueTreeState& state, const c
     : windowParameter (*state.getParameter (windowID))
 {
     toggle.setClickingTogglesState (true);
-    toggle.setWantsKeyboardFocus (false);
+    toggle.setGlyph ("OFF");
     toggle.setTooltip ("Running: match to the last few seconds only. Each take forgets what is older than the window, "
                        "and a match in force follows it on its own.");
     toggle.onStateChange = [this] { refreshEnablement(); };
@@ -44,7 +41,9 @@ WindowStepper::WindowStepper (juce::AudioProcessorValueTreeState& state, const c
     plus.onClick = [this] { step (+1); };
 
     readout.setJustificationType (juce::Justification::centred);
-    readout.setFont (Fonts::bold (12.0f));
+    readout.getProperties().set ("celineKeepFont", true);
+    readout.setFont (Ui::mono (9.5f));
+    readout.setBorderSize ({});
     readout.setEditable (false, true, false);
     readout.setTooltip ("How many seconds back a running take reaches. Double-click to type a length.");
     readout.onTextChange = [this]
@@ -72,7 +71,7 @@ WindowStepper::WindowStepper (juce::AudioProcessorValueTreeState& state, const c
     refreshEnablement();
 
     // Last, per the house rule: it fires resized().
-    setSize (preferredWidth, 24);
+    setSize (preferredWidth, preferredHeight);
 }
 
 WindowStepper::~WindowStepper() = default;
@@ -105,7 +104,10 @@ void WindowStepper::step (int direction)
 
 void WindowStepper::showValue (float seconds)
 {
-    readout.setText (windowParameter.getText (windowParameter.convertTo0to1 (seconds), 16), juce::dontSendNotification);
+    const auto text = windowParameter.getText (windowParameter.convertTo0to1 (seconds), 16);
+    readout.setText (text.toUpperCase(), juce::dontSendNotification);
+    toggle.setGlyph (toggle.getToggleState() ? "ON" : "OFF");
+    repaint();
 
     const auto& range = windowParameter.getNormalisableRange();
     minus.setEnabled (seconds > range.start + 1.0e-3f);
@@ -116,74 +118,69 @@ void WindowStepper::refreshEnablement()
 {
     // Dimmed rather than disabled while Running is off: the length can still be set
     // ahead, it just is not doing anything yet.
-    const auto alpha = toggle.getToggleState() ? 1.0f : 0.45f;
+    dimmed = ! toggle.getToggleState();
+    applyColours();
 
-    for (juce::Component* part : { static_cast<juce::Component*> (&minus), static_cast<juce::Component*> (&plus),
-                                   static_cast<juce::Component*> (&readout) })
-        part->setAlpha (alpha);
+    showValue (windowParameter.convertFrom0to1 (windowParameter.getValue()));
 }
 
 void WindowStepper::applyColours()
 {
-    const auto ink = Theme::textOnPanel();
+    // The readout is a field like the steppers either side of it: the field is painted
+    // behind it (paint), and the label carries only the figures, in the ink -- or the faint
+    // ink while Running is off and the length is not doing anything yet.
+    readout.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    readout.setColour (juce::Label::textColourId, dimmed ? Theme::phFaint() : Theme::phInk());
+    readout.setColour (juce::Label::backgroundWhenEditingColourId, Theme::phTile());
+    readout.setColour (juce::Label::textWhenEditingColourId, Theme::phInk());
+    readout.setColour (juce::Label::outlineWhenEditingColourId, Theme::accent());
+    readout.setColour (juce::TextEditor::textColourId, Theme::phInk());
+    readout.setColour (juce::TextEditor::highlightColourId, Theme::accent().withAlpha (0.4f));
+    readout.setColour (juce::CaretComponent::caretColourId, Theme::accent());
 
-    // Off, the switch is a word on the panel like PHASE beside it; on, it is filled with
-    // the violet of the correction it keeps moving, the way the phase box and Export are.
-    toggle.setColour (juce::TextButton::buttonColourId, ink.withAlpha (0.08f));
-    toggle.setColour (juce::TextButton::buttonOnColourId, Theme::correction());
-    toggle.setColour (juce::TextButton::textColourOffId, ink);
-    toggle.setColour (juce::TextButton::textColourOnId, ink);
-
-    readout.setColour (juce::Label::textColourId, ink);
-    readout.setColour (juce::Label::backgroundWhenEditingColourId, Theme::panel());
-    readout.setColour (juce::Label::textWhenEditingColourId, ink);
-    readout.setColour (juce::Label::outlineWhenEditingColourId, ink.withAlpha (0.35f));
-    readout.setColour (juce::TextEditor::textColourId, ink);
-    readout.setColour (juce::TextEditor::highlightColourId, Theme::correction().withAlpha (0.4f));
+    minus.repaint();
+    plus.repaint();
+    repaint();
 }
 
 void WindowStepper::StepButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
 {
-    const auto ink = Theme::textOnPanel();
-    const auto bounds = getLocalBounds().toFloat().reduced (0.5f);
+    const auto bounds = getLocalBounds().toFloat();
+    Ui::drawField (g, bounds, highlighted && isEnabled(), down);
 
-    // The same faint ink wash the switch wears when it is off, deepening under the pointer
-    // and again under the press, so the three read as one group.
-    g.setColour (ink.withAlpha (down ? 0.22f : highlighted ? 0.14f : 0.08f));
-    g.fillRoundedRectangle (bounds, Theme::cornerRadius);
-
-    // A disabled end of the range keeps its button in place, faded, rather than leaving
-    // a hole where it was.
-    g.setColour (ink.withAlpha (isEnabled() ? 1.0f : 0.3f));
+    // An end of the range keeps its button in place, faint, rather than leaving a hole.
+    const auto* owner = dynamic_cast<const WindowStepper*> (getParentComponent());
+    const auto faint = ! isEnabled() || (owner != nullptr && owner->dimmed);
+    g.setColour (faint ? Theme::phFaint() : Theme::phDim());
 
     const auto centre = bounds.getCentre();
-    const auto arm = juce::jmax (3.0f, bounds.getWidth() * 0.22f);
-    constexpr auto thickness = 1.6f;
+    constexpr auto arm = 3.5f;
+    constexpr auto thickness = 1.2f;
 
-    g.fillRoundedRectangle (juce::Rectangle<float> (arm * 2.0f, thickness).withCentre (centre), thickness / 2.0f);
+    g.fillRect (juce::Rectangle<float> (arm * 2.0f, thickness).withCentre (centre));
 
     if (plus)
-        g.fillRoundedRectangle (juce::Rectangle<float> (thickness, arm * 2.0f).withCentre (centre), thickness / 2.0f);
+        g.fillRect (juce::Rectangle<float> (thickness, arm * 2.0f).withCentre (centre));
+}
+
+void WindowStepper::paint (juce::Graphics& g)
+{
+    // The readout's field, behind the label that carries its figures.
+    Ui::drawField (g, readout.getBounds().toFloat(), readout.isMouseOver (true), readout.isBeingEdited());
 }
 
 void WindowStepper::resized()
 {
+    // One row: the switch, then the stepper -- minus, the length, plus -- in the rest, each a
+    // cell's gap from the next, as PHONICS spaces its fields.
     auto area = getLocalBounds();
 
     toggle.setBounds (area.removeFromLeft (switchWidth));
+    area.removeFromLeft (Ui::Space::cell);
 
-    // The stepper centred in what is left, so it sits in the middle of its own space
-    // however wide the band makes this.
-    const auto stepperWidth = stepButtonSize * 2 + readoutWidth;
-    auto stepper = area.withSizeKeepingCentre (juce::jmin (stepperWidth, area.getWidth()), area.getHeight());
-
-    const auto square = [&stepper] (bool fromLeft)
-    {
-        auto slot = fromLeft ? stepper.removeFromLeft (stepButtonSize) : stepper.removeFromRight (stepButtonSize);
-        return slot.withSizeKeepingCentre (stepButtonSize, juce::jmin (stepButtonSize, slot.getHeight()));
-    };
-
-    minus.setBounds (square (true));
-    plus.setBounds (square (false));
-    readout.setBounds (stepper);
+    minus.setBounds (area.removeFromLeft (stepButtonSize));
+    area.removeFromLeft (Ui::Space::cell);
+    plus.setBounds (area.removeFromRight (stepButtonSize));
+    area.removeFromRight (Ui::Space::cell);
+    readout.setBounds (area);
 }

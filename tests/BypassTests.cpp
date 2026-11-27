@@ -234,21 +234,20 @@ TEST_CASE ("The bypass button follows a bypass pressed in the host", "[bypass][u
     std::unique_ptr<juce::AudioProcessorEditor> editor (plugin.createEditorAndMakeActive());
     REQUIRE (editor != nullptr);
 
-    Celine::IconButton* bypass = nullptr;
+    juce::Button* bypass = nullptr;
 
     for (auto* child : editor->getChildren())
-        if (auto* button = dynamic_cast<Celine::IconButton*> (child); button != nullptr && button->getName() == "Bypass")
+        if (auto* button = dynamic_cast<juce::Button*> (child); button != nullptr && button->getName() == "Bypass")
             bypass = button;
 
     REQUIRE (bypass != nullptr);
-    REQUIRE_FALSE (bypass->isActive());
+    REQUIRE_FALSE (bypass->getToggleState());
 
     plugin.getBypassParameter()->setValueNotifyingHost (1.0f);
     CHECK (bypass->getToggleState());
-    CHECK (bypass->isActive());
 
     plugin.getBypassParameter()->setValueNotifyingHost (0.0f);
-    CHECK_FALSE (bypass->isActive());
+    CHECK_FALSE (bypass->getToggleState());
 
     plugin.editorBeingDeleted (editor.get());
 }

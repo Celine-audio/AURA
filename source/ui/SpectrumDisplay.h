@@ -1,7 +1,7 @@
 #pragma once
 
+#include "Controls.h"
 #include "PlotGeometry.h"
-#include <CelineUI/Theme.h>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -142,6 +142,11 @@ public:
     /** Dims the whole view and says why, e.g. while the plugin is bypassed. */
     void setOverlayMessage (const juce::String& message);
 
+    /** A title over a line of detail, both in capitals, centred on the plot. `dims` lays a
+        veil over everything under it first -- for Bypassed, where the picture is no longer
+        what you hear; an empty graph has nothing to veil. */
+    void setOverlay (const juce::String& title, const juce::String& detail, bool dims);
+
     void paint (juce::Graphics&) override;
     void resized() override;
 
@@ -238,7 +243,7 @@ private:
     }
 
     // Top right of the plot, on every view, since the preview is drawn on every view.
-    juce::TextButton previewButton { "Preview" };
+    Ui::Toggle previewButton { "Preview" };
     float correctionOffsetDb = 0.0f;
     bool linked = true;
 
@@ -247,7 +252,8 @@ private:
     float bandLow = 20.0f;
     float bandHigh = 20000.0f;
 
-    juce::String overlayMessage;
+    juce::String overlayMessage, overlayDetail;
+    bool overlayDims = true;
 
     juce::Point<float> mousePosition;
     bool mouseIsOver = false;
@@ -267,8 +273,11 @@ private:
     static constexpr float handleReach = 7.0f;
 
 
-    static constexpr float axisBottom = 26.0f;        // frequency labels, plus the two unit captions
-    static constexpr float axisTop = 9.0f;            // clearance for the topmost dB label
+    // The plot's margins, PHONICS's frequency plot's: the curve on a well, its scales on the
+    // page round it -- a column either side for the two dB scales, a band under it for the
+    // frequencies and the units.
+    static constexpr float axisBottom = 16.0f;        // frequency labels, with the units on the same row
+    static constexpr float axisTop = 8.0f;            // clearance for the topmost dB label
     static constexpr float axisLeft = 36.0f;          // room for the signal dB labels
     static constexpr float axisRight = 36.0f;         // room for the correction dB labels
 

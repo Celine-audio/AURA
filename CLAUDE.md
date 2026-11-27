@@ -45,8 +45,12 @@ runs tests and benchmarks together. On macOS a universal binary needs
 - `source/dsp/` — `MatchEngine` (learning and the correction), `FilterDesigner`
   (minimum and linear phase), `PartitionedConvolver`, `SpectrumAnalyzer`, `IrExport`
 - `source/ui/` — AURA's own interface: `SpectrumDisplay`, `PhaseTabs`, `ExportPanel`,
-  `PlotGeometry`, `SliderRowControl`, and `PluginLookAndFeel` — the seam the house kit
-  is extended through. The kit itself is in `modules/CelineUI`; see "The house kit"
+  `PlotGeometry`, `WindowStepper`; PHONICS's `Style` (fonts, `Ui::Space`) and `Controls`
+  (fields, segments, the toolbar's trim, plus AURA's `ParameterBox`); and
+  `PluginLookAndFeel` — the seam the house kit is extended through. The kit itself is in
+  `modules/CelineUI`; see "The house kit"
+- `source/PluginHouseOverrides.h` — the faces and corner radius the kit draws its own
+  windows with (see "The window's look")
 - `tests/` — Catch2; `benchmarks/` — Catch2 benchmarks
 - `assets/` — embedded as BinaryData by `cmake/Assets.cmake`, everything in the folder
 - `JUCE/`, `cmake/`, `modules/clap-juce-extensions`, `modules/CelineUI` — submodules
@@ -130,15 +134,10 @@ class, and GALLERY, which has no latency to match, the same fade written inline.
 **Running** (`ParamID::running`, with `ParamID::window` for how many seconds, 1–30)
 makes each learned take only the last few seconds rather than everything since Learn
 was pressed, and keeps a match in force following it. Its control is `WindowStepper`
-(`source/ui/`), in the middle of the bottom band between Smoothing and L/R Link: the word
-WINDOW is the switch, lit violet while Running is on, and beside it a "− 5.0 s +"
-stepper sets the length -- half-second steps up to ten seconds, whole ones past it, a
-held button repeats, a double-click on the readout types a value. The stepper stays
-usable, dimmed, while Running is off.
-
-Three settings on one band are what set the editor's **minimum width, 1000 px**: below
-that Smoothing and L/R Link have no track left to drag. `SliderRowControl::resized()`
-gives up the name column's spare room and then readout width before the track shrinks.
+(`source/ui/`), PROCESSING's RUNNING row: an ON/OFF switch field, lit while Running is
+on, and beside it a "− 5.0 S +" stepper of fields that sets the length -- half-second
+steps up to ten seconds, whole ones past it, a held button repeats, a double-click on the
+readout types a value. The stepper stays usable, dimmed, while Running is off.
 
 - **The window is read, not recorded.** Every capture analyzer keeps, beside its
   long-term sum, a ring of quarter-second segments of the same power
@@ -169,6 +168,43 @@ with a 5 s timeout (on Linux through curl, `NEEDS_CURL`, and `libcurl4-openssl-d
 the Linux CI), never retried. **Only a strictly newer version counts**, compared as
 numbers, and an unreadable one never does. Download opens the releases page. The tests
 never touch the network: a test editor is never on screen, so it never starts the check.
+
+## The window's look
+
+**PHONICS's look, taken whole** -- the user's decision: AURA and PHONICS are one visual
+family. Neutral greys, square corners, Inter Medium labels in spaced capitals, JetBrains
+Mono for every number, and the accent only for what is selected or being touched. The
+source is PHONICS's own code, not a re-drawing of it: `ui/Style`, `ui/Controls` and
+`ui/PluginLookAndFeel` are PHONICS's files, `PluginHouseOverrides.h` is its values (square
+corners, Inter in the kit's windows), and `PluginThemeRoles.h` carries its `ph*` greys under
+their own names and its values for the shared roles -- so a theme saved in one loads into
+the other and moves the same greys. When PHONICS's look changes, change these with it.
+
+- **The toolbar** is PHONICS's: the house mark, a hairline, the name in Inter ExtraBold;
+  at the right EXPORT IR in words, the OUTPUT trim (`Ui::OutputFader`), and bypass and
+  settings as square icon buttons, bypass filling with `danger()` while bypassed.
+- **The page** is `phPage`, 10 px in from the window, its contents `Ui::Space::outer` in:
+  the SPECTRUM title row, the graph, and three sheets along the foot.
+- **The graph** is a PHONICS frequency plot: the plot on a well with solid rules at the
+  named frequencies, its two dB scales and the frequencies in small mono on the page
+  round it. PREVIEW is a field in its top right, lit in `stale()`'s orange.
+- **STAGES** (`PhaseTabs`) is a sheet like PHONICS's mic sheet: three rows on a well,
+  the selected one a step lighter with a short accent bar, each with its curve's colour
+  as a legend line, a status in plain text (red while recording), and its fields -- FILE,
+  then LEARN (lit in `record()`) or MATCH (lit in `correction()`, in `stale()` when out of
+  date). **START BOTH** is in the heading band over FILE and LEARN. It starts both Learns
+  *fresh* -- the one already running included -- so the two takes begin on the same
+  block; with both running it reads STOP BOTH and stops them.
+- **MATCH** (AMOUNT, SMOOTHING, L/R LINK) and **PROCESSING** (PHASE as segments, RUNNING,
+  and LATENCY as plain text) are labelled rows on a well. A value is a `Ui::ParameterBox`:
+  a field dragged up or down, shift for fine, double-click for the default, the drag run
+  in the parameter's own normalised range and the field showing the parameter's own text.
+- **Editable and information are drawn differently**, as in PHONICS: what can be changed
+  is a field with a rule round it; what is only reported (a status, the latency, the
+  scales) is plain text with no box.
+
+The window keeps a fixed 2:1 aspect and its **minimum width, 1000 px**, is what leaves the
+stage rows room for their status beside MATCH and PROCESSING.
 
 ## Releases
 
