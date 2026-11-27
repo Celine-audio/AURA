@@ -6,19 +6,13 @@ using namespace Celine;
 
 namespace
 {
-    /** From the row's left edge to its first word: clear of the selection's bar, so the bar
-        marks the row and touches nothing. PHONICS's mic sheet's inset. */
-    constexpr float labelInset = 8.0f;
+    /** The stage's colour along the chevron's top: a clip's colour strip. */
+    constexpr float stripHeight = 3.0f;
 
-    /** The legend line: the stage's curve colour, as short and thin as a chart's key. */
-    constexpr float legendWidth = 14.0f;
-    constexpr float legendThickness = 2.0f;
+    /** Between the last word and the first field, and from the last field to the point. */
+    constexpr int textToControls = 10;
 
-    /** The columns the words take: the number, the name, and the status after them. */
-    constexpr float indexWidth = 22.0f;
-    constexpr float nameWidth = 96.0f;
-
-    juce::Font nameFont() { return Ui::spaced (Ui::medium (8.0f), 1.2f); }
+    juce::Font nameFont() { return Ui::spaced (Ui::bold (8.5f), 1.4f); }
     juce::Font statusFont() { return Ui::spaced (Ui::medium (7.5f), 1.0f); }
 }
 
@@ -102,61 +96,136 @@ void PhaseTab::setActionActive (bool shouldBeActive)
     action.setToggleState (lit, juce::dontSendNotification);
 }
 
+void PhaseTab::setEdges (bool isFirstTab, bool isLastTab)
+{
+    if (isFirst == isFirstTab && isLast == isLastTab)
+        return;
+
+    isFirst = isFirstTab;
+    isLast = isLastTab;
+    rebuildOutline();
+    repaint();
+}
+
+void PhaseTab::rebuildOutline()
+{
+    // Square ends, sharp points: PHONICS rounds nothing, and the chevrons are the shape.
+    const auto bounds = getLocalBounds().toFloat();
+    const auto chevron = (float) chevronWidth;
+    const auto mid = bounds.getCentreY();
+
+    juce::Path path;
+    path.startNewSubPath (bounds.getX(), bounds.getY());
+
+    if (isLast)
+    {
+        path.lineTo (bounds.getRight(), bounds.getY());
+        path.lineTo (bounds.getRight(), bounds.getBottom());
+    }
+    else
+    {
+        path.lineTo (bounds.getRight() - chevron, bounds.getY());
+        path.lineTo (bounds.getRight(), mid);
+        path.lineTo (bounds.getRight() - chevron, bounds.getBottom());
+    }
+
+    path.lineTo (bounds.getX(), bounds.getBottom());
+
+    if (! isFirst)
+        path.lineTo (bounds.getX() + chevron, mid);
+
+    path.closeSubPath();
+    outline = std::move (path);
+
+    // Each stage draws the notch on its *left*, never the point on its right: the stages
+    // paint left to right and overlap by one chevron, so a line on the right would be buried
+    // under the next stage's fill, where this one lands on top of the previous stage.
+    juce::Path seam;
+
+    if (! isFirst)
+    {
+        seam.startNewSubPath (bounds.getX(), bounds.getY());
+        seam.lineTo (bounds.getX() + chevron, mid);
+        seam.lineTo (bounds.getX(), bounds.getBottom());
+    }
+
+    separator = std::move (seam);
+}
+
+bool PhaseTab::hitTest (int x, int y)
+{
+    // Without this the rectangular bounds of overlapping stages would swallow clicks meant
+    // for the neighbour whose point sits inside them.
+    return outline.contains ((float) x, (float) y);
+}
+
 void PhaseTab::resized()
 {
-    // Right to left: the action in the last column, FILE before it, each a cell's gap from
-    // the next and half a cell in from the row's top and foot, as PHONICS insets its fields.
-    auto area = getLocalBounds().reduced (0, Ui::Space::cell / 2);
+    rebuildOutline();
 
-    action.setBounds (area.removeFromRight (actionWidth));
-    area.removeFromRight (Ui::Space::cell);
+    // Right to left, clear of the point: the action, then FILE before it, a cell apart, each
+    // a row tall and centred on the stage.
+    auto area = getLocalBounds();
+    area.removeFromRight (isLast ? Ui::Space::inner : chevronWidth + Ui::Space::cell);
+
+    const auto field = [&area] (juce::Component& c, int width)
+    {
+        c.setBounds (area.removeFromRight (width).withSizeKeepingCentre (width, Ui::Space::row));
+        area.removeFromRight (Ui::Space::cell);
+    };
+
+    field (action, actionWidth);
 
     if (importButton != nullptr)
-        importButton->setBounds (area.removeFromRight (importWidth));
+        field (*importButton, importWidth);
 }
 
 void PhaseTab::paint (juce::Graphics& g)
 {
-    const auto bounds = getLocalBounds().toFloat();
+    // The stage the graph shows is a step lighter than the others, as PHONICS marks a
+    // selected row; one under the pointer lifts a little.
+    g.setColour (Theme::underPointer (selected ? Theme::phControl() : Theme::phTile(), hovered && ! selected, false));
+    g.fillPath (outline);
 
-    // The selected row: a band a step lighter than the well, and a short accent bar at its
-    // left edge. A row under the pointer gets half of that band, so it reads as clickable.
-    if (selected || hovered)
+    // Its colour along its top, like a clip's: full on the stage shown, half once it holds a
+    // take, faint while it is empty.
     {
-        g.setColour (selected ? Theme::phTile() : Theme::phTile().withAlpha (0.5f));
-        g.fillRect (bounds);
+        juce::Graphics::ScopedSaveState clip (g);
+        g.reduceClipRegion (outline);
+        g.setColour (accent().withAlpha (selected ? 1.0f : hasData ? 0.5f : 0.18f));
+        g.fillRect (getLocalBounds().toFloat().withHeight (stripHeight));
     }
 
-    if (selected)
-    {
-        g.setColour (Theme::accent());
-        g.fillRect (bounds.withWidth (2.0f).reduced (0.0f, 3.0f));
-    }
+    // The seam is the page showing through, so the strip reads as one panel cut in three.
+    g.setColour (Theme::phPage());
+    g.strokePath (separator, juce::PathStrokeType (2.0f));
 
-    auto row = bounds.withTrimmedLeft (labelInset);
+    auto content = getLocalBounds().toFloat().withTrimmedTop (stripHeight);
+    content.removeFromLeft (isFirst ? 12.0f : (float) chevronWidth + 8.0f);
 
-    // The legend: which curve on the graph is this stage's.
-    const auto legend = row.removeFromLeft (legendWidth);
-    g.setColour (accent().withAlpha (hasData || selected ? 1.0f : 0.5f));
-    g.fillRect (legend.withSizeKeepingCentre (legendWidth, legendThickness));
-    row.removeFromLeft (8.0f);
+    const auto controls = importButton != nullptr ? importButton->getX() : action.getX();
+    content.setRight (juce::jmax (content.getX(), (float) (controls - textToControls)));
 
-    Ui::text (g, index, row.removeFromLeft (indexWidth), Ui::mono (8.0f), Theme::phFaint());
-    Ui::text (g, title.toUpperCase(), row.removeFromLeft (nameWidth), nameFont(),
-              selected ? Theme::phInk() : Theme::phLabel());
+    auto top = content.withHeight (content.getHeight() * 0.5f).withTrimmedTop (2.0f);
+    const auto bottom = content.withTrimmedTop (content.getHeight() * 0.5f).withTrimmedBottom (2.0f);
 
-    // The status is information, so it is plain text: red while recording, the secondary ink
+    Ui::text (g, index, top.removeFromLeft (20.0f), Ui::mono (8.0f), Theme::phFaint());
+    Ui::text (g, title.toUpperCase(), top, nameFont(), selected ? Theme::phInk() : Theme::phDim());
+
+    // The status is information, so it is plain text: red while recording, the label grey
     // once there is something learned, faint while the stage is empty.
-    const auto right = (float) (importButton != nullptr ? importButton->getX() : action.getX()) - (float) Ui::Space::inner;
-    const auto ink = isCapturing() ? Theme::record() : (hasData ? Theme::phDim() : Theme::phFaint());
-    Ui::text (g, status.toUpperCase(), row.withRight (juce::jmax (row.getX(), right)), statusFont(), ink);
+    const auto ink = isCapturing() ? Theme::record() : (hasData ? Theme::phLabel() : Theme::phFaint());
+    // Cut with an ellipsis where the window is narrow, never mid-word.
+    g.setFont (statusFont());
+    g.setColour (ink);
+    g.drawText (status.toUpperCase(), bottom.withTrimmedLeft (20.0f), juce::Justification::centredLeft, true);
 }
 
 void PhaseTab::mouseUp (const juce::MouseEvent& event)
 {
-    // Only a click that ends where it started selects -- a drag off the row is a change
+    // Only a click that ends where it started selects -- a drag off the stage is a change
     // of mind, not a selection.
-    if (getLocalBounds().contains (event.getPosition()) && onSelect != nullptr)
+    if (hitTest (event.x, event.y) && onSelect != nullptr)
         onSelect();
 }
 
@@ -229,32 +298,28 @@ void PhaseTabBar::setSelected (Stage stage)
         onSelectionChanged (stage);
 }
 
-void PhaseTabBar::paint (juce::Graphics& g)
-{
-    const auto bounds = getLocalBounds().toFloat();
-    const auto band = bounds.withHeight ((float) headingHeight);
-
-    Ui::Sheet::drawHeading (g, band, "STAGES");
-
-    // The status column's name, over where the status lines start.
-    Ui::Sheet::drawHint (g, band, labelInset + legendWidth + 8.0f + indexWidth + nameWidth, 60.0f, "STATUS");
-
-    // The rows' well: PHONICS's inspector ground, recessed under the page.
-    g.setColour (Theme::phWell());
-    g.fillRect (bounds.withTrimmedTop ((float) (headingHeight + Ui::Space::cell)));
-}
-
 void PhaseTabBar::resized()
 {
     auto area = getLocalBounds();
-    auto band = area.removeFromTop (headingHeight);
-    area.removeFromTop (Ui::Space::cell);
 
-    // START BOTH in the heading band, over the two columns it acts on -- FILE and LEARN -- and
-    // as wide as the two together, so it reads as their header-level action.
-    const auto both = PhaseTab::importWidth + Ui::Space::cell + PhaseTab::actionWidth;
-    startBoth.setBounds (band.removeFromRight (both).reduced (0, 2).withTrimmedBottom (1));
+    // START BOTH stands alone at the left, the strip's height, then a gap.
+    startBoth.setBounds (area.removeFromLeft (startBothWidth));
+    area.removeFromLeft (Ui::Space::gutter);
 
-    for (auto& tab : tabs)
-        tab->setBounds (area.removeFromTop (rowHeight));
+    // The overlap gives back exactly the width the chevrons take up, so the three stages come
+    // out the same size and the strip fills its bounds.
+    const auto overlap = PhaseTab::chevronWidth;
+    const auto each = (area.getWidth() + overlap * (numStages - 1)) / numStages;
+
+    auto x = area.getX();
+
+    for (int i = 0; i < numStages; ++i)
+    {
+        auto& tab = *tabs[(size_t) i];
+        const auto width = i == numStages - 1 ? area.getRight() - x : each;
+
+        tab.setEdges (i == 0, i == numStages - 1);
+        tab.setBounds (x, area.getY(), width, area.getHeight());
+        x += width - overlap;
+    }
 }

@@ -27,7 +27,7 @@ TEST_CASE ("A tab's stage colour follows the theme", "[theme]")
     const struct Restore { ~Restore() { Theme::palette().reset(); } } restore;
 
     PhaseTabBar bar;
-    bar.setBounds (0, 0, 600, PhaseTabBar::preferredHeight);
+    bar.setBounds (0, 0, 900, PhaseTabBar::preferredHeight);
     bar.setSelected (PhaseTabBar::current);
 
     auto& tab = bar.getTab (PhaseTabBar::current);
@@ -59,9 +59,10 @@ TEST_CASE ("A tab's stage colour follows the theme", "[theme]")
                     ++moved;
     }
 
-    // The stage's colour is the row's legend line, the curve's key, and only that: a short
-    // line two pixels thick. So the whole of it has to follow the role. Zero is what the
-    // constructor snapshot gave.
+    // The stage's colour is a strip three pixels deep along the chevron's top edge, the way a
+    // clip carries its colour. So the whole strip has to follow the role: twice the tab's
+    // width is most of its three rows once the chevron has taken its corners. Zero is what
+    // the constructor snapshot gave.
     INFO ("pixels that followed the role, outside the action button: " << moved);
-    CHECK (moved >= 20);
+    CHECK (moved > tab.getWidth() * 2);
 }

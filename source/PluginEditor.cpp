@@ -45,10 +45,19 @@ namespace
         Ui::Space::outer in from its own. */
     constexpr int pageInset = 10;
 
-    /** The two settings groups beside the stages, and the label column their rows share. */
-    constexpr int matchWidth = 230;
-    constexpr int processingWidth = 250;
-    constexpr int groupLabelWidth = 84;
+    /** The settings row under the stages: a caption band over a rule, then a well holding
+        one row of controls -- the old bottom bar's caption-over-control, in PHONICS's dress. */
+    constexpr int captionHeight = Ui::Space::row;
+    constexpr int settingsRowHeight = 28;
+    constexpr int settingsHeight = captionHeight + Ui::Space::cell + settingsRowHeight;
+
+    /** The columns' widths where they are fixed; AMOUNT, SMOOTHING and L/R LINK share the rest. */
+    constexpr int phaseWidth = 200;
+    constexpr int runningWidth = 210;
+    constexpr int latencyWidth = 90;
+    constexpr int settingsGap = Ui::Space::gutter * 2;
+
+    const char* const settingsCaptions[] = { "PHASE", "AMOUNT", "SMOOTHING", "L/R LINK", "RUNNING", "LATENCY" };
 
     // juce::String treats a plain char* as Latin-1, so a UTF-8 glyph needs fromUTF8.
     const juce::String ellipsis = juce::String::fromUTF8 ("\xe2\x80\xa6");
@@ -281,7 +290,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         {
             linearPhase = index < 0.5f;
             phaseSegments.setSelected (linearPhase ? 0 : 1);
-            repaint (processingGroup);
+            repaint (settingsColumns[latencyColumn]);
         }, nullptr);
 
         phaseAttachment->sendInitialUpdate();
@@ -993,15 +1002,19 @@ void PluginEditor::paint (juce::Graphics& g)
     g.setColour (Theme::phPage());
     g.fillRect (page);
 
-    // The section's title, in PHONICS's section-title face, and a note to be read last.
+    // The section's title, in PHONICS's section-title face.
     Ui::textOnCaps (g, "SPECTRUM", titleRow.toFloat(), Ui::spaced (Ui::heavy (11.0f), 2.0f), Theme::phInk());
-    Ui::textOnCaps (g, "WHAT IS PLAYING, WHAT IT SHOULD SOUND LIKE, AND THE EQ BETWEEN THEM",
-                    titleRow.toFloat(), Ui::spaced (Ui::medium (8.0f), 1.2f), Theme::phIndex(),
-                    juce::Justification::centredRight);
 
-    // The rule between the stages and the settings.
-    g.setColour (Theme::phRule());
-    g.fillRect (groupsRule);
+    // The settings row: each column's caption over its rule, and the well its control sits in.
+    for (size_t i = 0; i < settingsColumns.size(); ++i)
+    {
+        auto column = settingsColumns[i];
+        Ui::Sheet::drawHeading (g, column.removeFromTop (captionHeight).toFloat(), settingsCaptions[i]);
+        column.removeFromTop (Ui::Space::cell);
+
+        g.setColour (Theme::phWell());
+        g.fillRect (column);
+    }
 
     // What the phase in force costs: half the filter at the running rate in linear phase,
     // nothing in minimum. Information, so plain text with no box.
@@ -1010,28 +1023,9 @@ void PluginEditor::paint (juce::Graphics& g)
                                ? juce::roundToInt (1000.0 * (double) (processorRef.getFilterLength() / 2) / rate)
                                : 0;
 
-    paintGroup (g, matchGroup, "MATCH", { "AMOUNT", "SMOOTHING", "L/R LINK" });
-    paintGroup (g, processingGroup, "PROCESSING", { "PHASE", "RUNNING", "LATENCY" });
-
-    const auto latencyRow = processingGroup.withTrimmedTop (PhaseTabBar::headingHeight + Ui::Space::cell + 2 * PhaseTabBar::rowHeight)
-                                           .withHeight (PhaseTabBar::rowHeight)
-                                           .withTrimmedLeft (groupLabelWidth)
-                                           .toFloat();
-    Ui::text (g, juce::String (latencyMs) + " MS", latencyRow.reduced (6.0f, 0.0f), Ui::mono (9.5f), Theme::phDim());
-}
-
-void PluginEditor::paintGroup (juce::Graphics& g, juce::Rectangle<int> area, const juce::String& heading,
-                               std::initializer_list<const char*> labels)
-{
-    Ui::Sheet::drawHeading (g, area.removeFromTop (PhaseTabBar::headingHeight).toFloat(), heading);
-    area.removeFromTop (Ui::Space::cell);
-
-    // The rows' well, as the stages have theirs.
-    g.setColour (Theme::phWell());
-    g.fillRect (area);
-
-    for (const auto* label : labels)
-        Ui::Sheet::drawLabel (g, area.removeFromTop (PhaseTabBar::rowHeight).withTrimmedLeft (8).toFloat(), label);
+    const auto latencyWell = settingsColumns[latencyColumn].withTrimmedTop (captionHeight + Ui::Space::cell).toFloat();
+    Ui::text (g, juce::String (latencyMs) + " MS", latencyWell.reduced ((float) Ui::Space::inner, 0.0f),
+              Ui::mono (9.5f), Theme::phDim());
 }
 
 void PluginEditor::paintToolbar (juce::Graphics& g)
@@ -1084,34 +1078,34 @@ void PluginEditor::resized()
     titleRow = area.removeFromTop (Ui::Space::sectionHeader);
     area.removeFromTop (Ui::Space::gutter);
 
-    // The sheets along the foot: the stages, a rule, then MATCH and PROCESSING.
-    auto sheets = area.removeFromBottom (PhaseTabBar::preferredHeight);
+    // Along the foot, bottom up: the settings row, then the stages' chevrons under the graph --
+    // Current > Reference > EQ Curve, the order you work in.
+    auto settings = area.removeFromBottom (settingsHeight);
+    area.removeFromBottom (Ui::Space::gutter * 2);
+    tabBar.setBounds (area.removeFromBottom (PhaseTabBar::preferredHeight));
     area.removeFromBottom (Ui::Space::gutter);
     display.setBounds (area);
 
-    processingGroup = sheets.removeFromRight (processingWidth);
-    sheets.removeFromRight (Ui::Space::gutter * 2);
-    matchGroup = sheets.removeFromRight (matchWidth);
-    sheets.removeFromRight (Ui::Space::gutter);
-    groupsRule = sheets.removeFromRight (1);
-    sheets.removeFromRight (Ui::Space::gutter);
-    tabBar.setBounds (sheets);
+    const auto shared = (settings.getWidth() - phaseWidth - runningWidth - latencyWidth - settingsGap * (numSettingsColumns - 1)) / 3;
+    const int widths[] = { phaseWidth, shared, shared, shared, runningWidth, latencyWidth };
 
-    // A group's rows: the label column, then the control, half a cell in from the row's top
-    // and foot and an inner margin from the well's right edge.
-    const auto rowOf = [] (juce::Rectangle<int> group, int index)
+    for (size_t i = 0; i < settingsColumns.size(); ++i)
     {
-        return group.withTrimmedTop (PhaseTabBar::headingHeight + Ui::Space::cell + index * PhaseTabBar::rowHeight)
-                    .withHeight (PhaseTabBar::rowHeight)
-                    .withTrimmedLeft (groupLabelWidth)
-                    .withTrimmedRight (Ui::Space::cell)
-                    .reduced (0, Ui::Space::cell / 2);
+        settingsColumns[i] = i + 1 == settingsColumns.size() ? settings : settings.removeFromLeft (widths[i]);
+        settings.removeFromLeft (settingsGap);
+    }
+
+    // A control fills its column's well, a cell in from each edge, a row tall.
+    const auto controlIn = [] (juce::Rectangle<int> column)
+    {
+        return column.withTrimmedTop (captionHeight + Ui::Space::cell)
+                     .reduced (Ui::Space::cell)
+                     .withSizeKeepingCentre (column.getWidth() - 2 * Ui::Space::cell, Ui::Space::row - 2);
     };
 
-    amountBox.setBounds (rowOf (matchGroup, 0));
-    smoothingBox.setBounds (rowOf (matchGroup, 1));
-    linkBox.setBounds (rowOf (matchGroup, 2));
-
-    phaseSegments.setBounds (rowOf (processingGroup, 0));
-    windowControl.setBounds (rowOf (processingGroup, 1));
+    phaseSegments.setBounds (controlIn (settingsColumns[phaseColumn]));
+    amountBox.setBounds (controlIn (settingsColumns[amountColumn]));
+    smoothingBox.setBounds (controlIn (settingsColumns[smoothingColumn]));
+    linkBox.setBounds (controlIn (settingsColumns[linkColumn]));
+    windowControl.setBounds (controlIn (settingsColumns[runningColumn]));
 }

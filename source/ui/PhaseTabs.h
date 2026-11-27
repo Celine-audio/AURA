@@ -7,19 +7,19 @@
 #include <memory>
 
 /**
-    One stage of the match workflow, as a row of the STAGES sheet: a short line in the
-    stage's own curve colour (the graph's legend), its number and name, a line of status,
-    and at the right its fields -- FILE to learn it from audio on disk, and the action:
-    LEARN, or MATCH on the last.
+    One stage of the match workflow, drawn as a chevron in the strip under the graph:
+    Current > Reference > EQ Curve, so the strip reads as the order you work in.
 
-    Drawn the way PHONICS draws its microphone sheet. The selected row is a band a step
-    lighter than the well behind it with a short accent bar at its left edge, and nothing
-    is drawn over a word. Clicking the row selects it, which is what the graph shows;
-    clicking a field is a separate thing -- it starts a capture or commits the match -- and
-    never changes the selection on its own.
+    PHONICS's greys and square ends; the chevron points are the one shape it adds. The
+    stage's curve colour runs along its top as a strip, the way a clip carries its colour:
+    full on the stage the graph is showing, half once it holds a take, faint while it is
+    empty. Under its number and name, a status line in plain text (red while recording),
+    and at the right its fields -- FILE, and the action: LEARN, or MATCH on the last.
 
-    Every colour is read as it paints, and the stage's colour is held as its role, so a
-    theme change needs nothing but a repaint.
+    Clicking the body selects the stage, which is what the graph shows; clicking a field is
+    a separate thing -- it starts a capture or commits the match -- and never changes the
+    selection on its own. Every colour is read as it paints, and the stage's colour is held
+    as its role, so a theme change needs nothing but a repaint.
 */
 class PhaseTab : public juce::Component,
                  public juce::SettableTooltipClient
@@ -69,14 +69,26 @@ public:
     void mouseEnter (const juce::MouseEvent&) override;
     void mouseExit (const juce::MouseEvent&) override;
     void lookAndFeelChanged() override { repaint(); }
+    bool hitTest (int x, int y) override;
 
-    /** The two field columns, right to left: the action, and FILE before it. Public so the
-        sheet can name them in its heading band. */
-    static constexpr int actionWidth = 76;
-    static constexpr int importWidth = 60;
+    /** How far the chevron point juts out, and so how much neighbouring stages overlap for
+        the point to sit in the next one's notch. */
+    static constexpr int chevronWidth = 14;
+
+    /** Set by the strip so the end stages get a flat outer edge rather than a stray notch or
+        point hanging off the end of the row. */
+    void setEdges (bool isFirstTab, bool isLastTab);
+
+    static constexpr int actionWidth = 72;
+    static constexpr int importWidth = 52;
 
 private:
     void refreshActionLook();
+
+    // Built once in resized(): hitTest runs on every mouse move over the strip.
+    void rebuildOutline();
+    juce::Path outline, separator;
+    bool isFirst = false, isLast = false;
 
     juce::String title, status, index;
 
@@ -99,9 +111,9 @@ private:
 };
 
 /**
-    The STAGES sheet: a heading over a rule, START BOTH at the heading's right, and the
-    three stages as rows under it -- Current, Reference, EQ Curve. The sheet paints the well
-    the rows sit on.
+    The strip under the graph: START BOTH standing alone at its left, then the three stages
+    as chevrons -- Current, Reference, EQ Curve -- overlapping so each point nests into the
+    next one's notch.
 */
 class PhaseTabBar : public juce::Component
 {
@@ -125,12 +137,12 @@ public:
         when it is set programmatically. */
     std::function<void (Stage)> onSelectionChanged;
 
-    /** The heading band, the gap under it and the three rows. */
-    static constexpr int headingHeight = Ui::Space::row;
-    static constexpr int rowHeight = 24;
-    static constexpr int preferredHeight = headingHeight + Ui::Space::cell + rowHeight * (int) numStages;
+    /** Tall enough for a name over a status line beside a field. */
+    static constexpr int preferredHeight = 48;
 
-    void paint (juce::Graphics&) override;
+    /** START BOTH's width, and its gap to Current. */
+    static constexpr int startBothWidth = 104;
+
     void resized() override;
 
 private:

@@ -134,7 +134,7 @@ class, and GALLERY, which has no latency to match, the same fade written inline.
 **Running** (`ParamID::running`, with `ParamID::window` for how many seconds, 1–30)
 makes each learned take only the last few seconds rather than everything since Learn
 was pressed, and keeps a match in force following it. Its control is `WindowStepper`
-(`source/ui/`), PROCESSING's RUNNING row: an ON/OFF switch field, lit while Running is
+(`source/ui/`), the settings row's RUNNING: an ON/OFF switch field, lit while Running is
 on, and beside it a "− 5.0 S +" stepper of fields that sets the length -- half-second
 steps up to ten seconds, whole ones past it, a held button repeats, a double-click on the
 readout types a value. The stepper stays usable, dimmed, while Running is off.
@@ -184,27 +184,32 @@ the other and moves the same greys. When PHONICS's look changes, change these wi
   at the right EXPORT IR in words, the OUTPUT trim (`Ui::OutputFader`), and bypass and
   settings as square icon buttons, bypass filling with `danger()` while bypassed.
 - **The page** is `phPage`, 10 px in from the window, its contents `Ui::Space::outer` in:
-  the SPECTRUM title row, the graph, and three sheets along the foot.
+  the SPECTRUM title, the graph, the stages' chevrons, and the settings row.
 - **The graph** is a PHONICS frequency plot: the plot on a well with solid rules at the
   named frequencies, its two dB scales and the frequencies in small mono on the page
   round it. PREVIEW is a field in its top right, lit in `stale()`'s orange.
-- **STAGES** (`PhaseTabs`) is a sheet like PHONICS's mic sheet: three rows on a well,
-  the selected one a step lighter with a short accent bar, each with its curve's colour
-  as a legend line, a status in plain text (red while recording), and its fields -- FILE,
-  then LEARN (lit in `record()`) or MATCH (lit in `correction()`, in `stale()` when out of
-  date). **START BOTH** is in the heading band over FILE and LEARN. It starts both Learns
-  *fresh* -- the one already running included -- so the two takes begin on the same
-  block; with both running it reads STOP BOTH and stops them.
-- **MATCH** (AMOUNT, SMOOTHING, L/R LINK) and **PROCESSING** (PHASE as segments, RUNNING,
-  and LATENCY as plain text) are labelled rows on a well. A value is a `Ui::ParameterBox`:
-  a field dragged up or down, shift for fine, double-click for the default, the drag run
-  in the parameter's own normalised range and the field showing the parameter's own text.
+- **The stages keep their chevrons** (`PhaseTabs`) -- Current > Reference > EQ Curve,
+  the order you work in, which is the one shape AURA adds to PHONICS's. Square ends,
+  PHONICS's greys, the seams the page showing through. Each carries its curve's colour
+  as a strip along its top, like a clip's: full on the stage shown, half once it holds a
+  take, faint while empty. The stage shown is a step lighter. Under its number and name,
+  a status in plain text (red while recording); at its right its fields -- FILE, then
+  LEARN (lit in `record()`) or MATCH (lit in `correction()`, in `stale()` when out of
+  date). **START BOTH** stands alone left of Current. It starts both Learns *fresh* --
+  the one already running included -- so the two takes begin on the same block; with
+  both running it reads STOP BOTH and stops them.
+- **The settings row** is the old bottom bar's idea -- a caption over each control -- in
+  PHONICS's dress: each column a caption over a rule and a well holding its control.
+  PHASE (segments), AMOUNT, SMOOTHING, L/R LINK, RUNNING, and LATENCY as plain text. A
+  value is a `Ui::ParameterBox`: a field dragged up or down, shift for fine,
+  double-click for the default, the drag run in the parameter's own normalised range
+  and the field showing the parameter's own text.
 - **Editable and information are drawn differently**, as in PHONICS: what can be changed
   is a field with a rule round it; what is only reported (a status, the latency, the
   scales) is plain text with no box.
 
-The window keeps a fixed 2:1 aspect and its **minimum width, 1000 px**, is what leaves the
-stage rows room for their status beside MATCH and PROCESSING.
+The window keeps a fixed 2:1 aspect and its **minimum width, 1000 px**, is what leaves each
+chevron room for its name, status and fields.
 
 ## Releases
 

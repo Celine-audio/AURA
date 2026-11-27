@@ -97,16 +97,14 @@ private:
     TraceFade currentFade, referenceFade;
 
     // Laid out in resized() and painted in paint(), because they sit behind the children
-    // rather than being children: the page, its title row, the groups' headings and wells,
-    // and the rule between the stages and the settings.
-    juce::Rectangle<int> page, titleRow, matchGroup, processingGroup, groupsRule;
+    // rather than being children: the page, its title row, and the settings row's columns --
+    // each a caption over a rule, and a well under its control.
+    enum SettingsColumn { phaseColumn, amountColumn, smoothingColumn, linkColumn, runningColumn, latencyColumn, numSettingsColumns };
+    juce::Rectangle<int> page, titleRow;
+    std::array<juce::Rectangle<int>, numSettingsColumns> settingsColumns;
 
     /** The toolbar, PHONICS's: the house mark, a hairline, the product's name. */
     void paintToolbar (juce::Graphics&);
-
-    /** One settings group: a heading band, and a well under labelled rows. */
-    void paintGroup (juce::Graphics&, juce::Rectangle<int> area, const juce::String& heading,
-                     std::initializer_list<const char*> labels);
 
     /** The artwork this window tints once rather than at every paint. Called from the
         constructor and again on every theme change. */
@@ -126,14 +124,14 @@ private:
     // Starts both Learns at once, or stops both -- see PhaseTabBar.
     void startOrStopBoth();
 
-    // MATCH: what shapes and scales the curve. Fields dragged like PHONICS's number boxes,
+    // What shapes and scales the curve. Fields dragged like PHONICS's number boxes,
     // in each parameter's own range and words. The band limits are not here: they are
     // dragged on the graph itself, where you can see what they are doing.
     Ui::ParameterBox amountBox    { *processorRef.getAPVTS().getParameter (ParamID::amount),    "%" };
     Ui::ParameterBox smoothingBox { *processorRef.getAPVTS().getParameter (ParamID::smoothing), "oct" };
     Ui::ParameterBox linkBox      { *processorRef.getAPVTS().getParameter (ParamID::link),      "%" };
 
-    // PROCESSING's RUNNING row: the switch, and how many seconds back a take reads.
+    // RUNNING: the switch, and how many seconds back a take reads.
     WindowStepper windowControl { processorRef.getAPVTS(), ParamID::running, ParamID::window };
 
     // Writes a band edge dragged on the graph back to the parameters, bracketed so
