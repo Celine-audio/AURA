@@ -280,11 +280,30 @@ namespace Ui
         if (! isEnabled())
             g.beginTransparencyLayer (0.45f);
 
-        drawField (g, bounds, hovered && isEnabled(), lit, litColour());
+        if (prominent)
+        {
+            g.setColour (Theme::underPointer (Theme::phTrack(), hovered && isEnabled(), false));
+            g.fillRect (bounds);
+
+            if (lit)
+            {
+                g.setColour (litColour().withAlpha (0.18f));
+                g.fillRect (bounds);
+            }
+
+            g.setColour (lit ? litColour() : Theme::phTrack().brighter (0.15f));
+            g.drawRect (bounds.reduced (0.5f), 1.0f);
+        }
+        else
+        {
+            drawField (g, bounds, hovered && isEnabled(), lit, litColour());
+        }
 
         if (glyph.isNotEmpty())
         {
-            const auto ink = lit ? litColour() : (dimmed ? Theme::phFaint() : Theme::phDim());
+            const auto unlit = prominent ? Theme::phInk() : Theme::phDim();
+            const auto ink = lit ? (prominent ? litColour().brighter (0.3f) : litColour())
+                                 : (dimmed ? Theme::phFaint() : unlit);
             Ui::text (g, glyph, bounds, medium (9.0f), ink, juce::Justification::centred);
         }
 
@@ -292,6 +311,15 @@ namespace Ui
             g.endTransparencyLayer();
 
         juce::ignoreUnused (down);
+    }
+
+    void Toggle::setProminent (bool shouldBeProminent)
+    {
+        if (prominent != shouldBeProminent)
+        {
+            prominent = shouldBeProminent;
+            repaint();
+        }
     }
 
     void Toggle::setLitRole (Theme::Role role)

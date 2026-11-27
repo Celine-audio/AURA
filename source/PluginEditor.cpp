@@ -54,10 +54,9 @@ namespace
     /** The columns' widths where they are fixed; AMOUNT, SMOOTHING and L/R LINK share the rest. */
     constexpr int phaseWidth = 200;
     constexpr int runningWidth = 210;
-    constexpr int latencyWidth = 90;
     constexpr int settingsGap = Ui::Space::gutter * 2;
 
-    const char* const settingsCaptions[] = { "PHASE", "AMOUNT", "SMOOTHING", "L/R LINK", "RUNNING", "LATENCY" };
+    const char* const settingsCaptions[] = { "PHASE", "AMOUNT", "SMOOTHING", "L/R LINK", "RUNNING" };
 
     // juce::String treats a plain char* as Latin-1, so a UTF-8 glyph needs fromUTF8.
     const juce::String ellipsis = juce::String::fromUTF8 ("\xe2\x80\xa6");
@@ -290,7 +289,6 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         {
             linearPhase = index < 0.5f;
             phaseSegments.setSelected (linearPhase ? 0 : 1);
-            repaint (settingsColumns[latencyColumn]);
         }, nullptr);
 
         phaseAttachment->sendInitialUpdate();
@@ -697,7 +695,7 @@ void PluginEditor::refreshDisplay()
     else if (processorRef.canMatch())
         display.setOverlay ("Ready to match", "Press Match to apply the correction", false);
     else
-        display.setOverlay ("Nothing learned yet", "Record a current and a reference signal, then press Match", false);
+        display.setOverlay ("No EQ curve", "Learn a current and a reference signal first", false);
 
     display.repaint();
 }
@@ -1015,17 +1013,6 @@ void PluginEditor::paint (juce::Graphics& g)
         g.setColour (Theme::phWell());
         g.fillRect (column);
     }
-
-    // What the phase in force costs: half the filter at the running rate in linear phase,
-    // nothing in minimum. Information, so plain text with no box.
-    const auto rate = processorRef.getSampleRate();
-    const auto latencyMs = linearPhase && rate > 0.0
-                               ? juce::roundToInt (1000.0 * (double) (processorRef.getFilterLength() / 2) / rate)
-                               : 0;
-
-    const auto latencyWell = settingsColumns[latencyColumn].withTrimmedTop (captionHeight + Ui::Space::cell).toFloat();
-    Ui::text (g, juce::String (latencyMs) + " MS", latencyWell.reduced ((float) Ui::Space::inner, 0.0f),
-              Ui::mono (9.5f), Theme::phDim());
 }
 
 void PluginEditor::paintToolbar (juce::Graphics& g)
@@ -1086,8 +1073,8 @@ void PluginEditor::resized()
     area.removeFromBottom (Ui::Space::gutter);
     display.setBounds (area);
 
-    const auto shared = (settings.getWidth() - phaseWidth - runningWidth - latencyWidth - settingsGap * (numSettingsColumns - 1)) / 3;
-    const int widths[] = { phaseWidth, shared, shared, shared, runningWidth, latencyWidth };
+    const auto shared = (settings.getWidth() - phaseWidth - runningWidth - settingsGap * (numSettingsColumns - 1)) / 3;
+    const int widths[] = { phaseWidth, shared, shared, shared, runningWidth };
 
     for (size_t i = 0; i < settingsColumns.size(); ++i)
     {

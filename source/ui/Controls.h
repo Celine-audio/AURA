@@ -110,6 +110,11 @@ namespace Ui
         void setLitRole (Celine::Theme::Role role);
         void clearLitRole();
 
+        /** A field that has to stand out from the panel it sits on, as the stages' actions do on
+            a chevron that may itself be the control grey: a step lighter than it, in the track
+            grey, its word in ink, and filled with a wash of its lit colour while on. */
+        void setProminent (bool shouldBeProminent);
+
         void paintButton (juce::Graphics&, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
 
         void visibilityChanged() override;
@@ -119,7 +124,7 @@ namespace Ui
         juce::Colour litColour() const;
 
         juce::String glyph;
-        bool dimmed = false;
+        bool dimmed = false, prominent = false;
         std::optional<Celine::Theme::Role> litRole;
     };
 

@@ -14,7 +14,7 @@
     stage's curve colour runs along its top as a strip, the way a clip carries its colour:
     full on the stage the graph is showing, half once it holds a take, faint while it is
     empty. Under its number and name, a status line in plain text (red while recording),
-    and at the right its fields -- FILE, and the action: LEARN, or MATCH on the last.
+    and at the right its fields -- FILE…, and the action: LEARN, or MATCH on the last.
 
     Clicking the body selects the stage, which is what the graph shows; clicking a field is
     a separate thing -- it starts a capture or commits the match -- and never changes the
@@ -53,7 +53,7 @@ public:
 
     Ui::Toggle& getActionButton() noexcept { return action; }
 
-    /** Gives this stage a FILE field before its action: learning it from an audio file
+    /** Gives this stage a FILE… field before its action: learning it from an audio file
         instead of from what is playing. */
     void enableImport();
 
@@ -79,8 +79,8 @@ public:
         point hanging off the end of the row. */
     void setEdges (bool isFirstTab, bool isLastTab);
 
-    static constexpr int actionWidth = 72;
-    static constexpr int importWidth = 52;
+    static constexpr int actionWidth = 60;
+    static constexpr int importWidth = 54;
 
 private:
     void refreshActionLook();

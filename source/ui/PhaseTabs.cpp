@@ -24,6 +24,7 @@ PhaseTab::PhaseTab (const juce::String& tabTitle, const juce::String& actionText
     action.setGlyph (actionText.toUpperCase());
     action.setTooltip (arms ? "Learn this signal from what is playing. Press again to stop."
                             : "Match the current signal to the reference.");
+    action.setProminent (true);
     refreshActionLook();
     addAndMakeVisible (action);
 
@@ -36,7 +37,8 @@ void PhaseTab::enableImport()
         return;
 
     importButton = std::make_unique<Ui::Toggle> ("Load file");
-    importButton->setGlyph ("FILE");
+    importButton->setGlyph (juce::String::fromUTF8 ("FILE\xe2\x80\xa6"));
+    importButton->setProminent (true);
     importButton->setTooltip ("Learn this signal from an audio file.");
 
     addAndMakeVisible (*importButton);
@@ -263,6 +265,7 @@ PhaseTabBar::PhaseTabBar()
 
     startBoth.setGlyph ("START BOTH");
     startBoth.setLitRole (Theme::Role::record);
+    startBoth.setProminent (true);
     startBoth.setTooltip ("Start learning the current signal and the reference together.");
     addAndMakeVisible (startBoth);
 

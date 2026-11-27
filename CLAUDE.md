@@ -193,14 +193,14 @@ the other and moves the same greys. When PHONICS's look changes, change these wi
   PHONICS's greys, the seams the page showing through. Each carries its curve's colour
   as a strip along its top, like a clip's: full on the stage shown, half once it holds a
   take, faint while empty. The stage shown is a step lighter. Under its number and name,
-  a status in plain text (red while recording); at its right its fields -- FILE, then
+  a status in plain text (red while recording); at its right its fields, a step lighter than any stage so they read on it -- FILE…, then
   LEARN (lit in `record()`) or MATCH (lit in `correction()`, in `stale()` when out of
   date). **START BOTH** stands alone left of Current. It starts both Learns *fresh* --
   the one already running included -- so the two takes begin on the same block; with
   both running it reads STOP BOTH and stops them.
 - **The settings row** is the old bottom bar's idea -- a caption over each control -- in
   PHONICS's dress: each column a caption over a rule and a well holding its control.
-  PHASE (segments), AMOUNT, SMOOTHING, L/R LINK, RUNNING, and LATENCY as plain text. A
+  PHASE (segments), AMOUNT, SMOOTHING, L/R LINK and RUNNING. A
   value is a `Ui::ParameterBox`: a field dragged up or down, shift for fine,
   double-click for the default, the drag run in the parameter's own normalised range
   and the field showing the parameter's own text.

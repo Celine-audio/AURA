@@ -99,7 +99,7 @@ private:
     // Laid out in resized() and painted in paint(), because they sit behind the children
     // rather than being children: the page, its title row, and the settings row's columns --
     // each a caption over a rule, and a well under its control.
-    enum SettingsColumn { phaseColumn, amountColumn, smoothingColumn, linkColumn, runningColumn, latencyColumn, numSettingsColumns };
+    enum SettingsColumn { phaseColumn, amountColumn, smoothingColumn, linkColumn, runningColumn, numSettingsColumns };
     juce::Rectangle<int> page, titleRow;
     std::array<juce::Rectangle<int>, numSettingsColumns> settingsColumns;
 
